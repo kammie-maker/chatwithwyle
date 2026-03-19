@@ -1,11 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { cookies } from "next/headers";
+import { getLastKbUpdate } from "../kb-update/route";
 
 // ── Knowledge base cache ──────────────────────────────────────────────────────
 let kbCache: { text: string; fetchedAt: number } | null = null;
 const KB_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 async function fetchKnowledgeBase(): Promise<string> {
+  // Check if KB was updated since last cache — if so, bust cache
+  const lastUpdate = getLastKbUpdate();
+  if (kbCache && lastUpdate > kbCache.fetchedAt) {
+    console.log("[chat] KB cache busted due to kb-update");
+    kbCache = null;
+  }
   if (kbCache && Date.now() - kbCache.fetchedAt < KB_CACHE_TTL) return kbCache.text;
 
   const url = process.env.GOOGLE_DRIVE_KB_URL;
