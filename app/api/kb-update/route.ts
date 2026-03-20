@@ -36,11 +36,11 @@ export async function POST(req: Request) {
     const timestamp = new Date().toISOString();
     const formattedText = `--- Update ${timestamp} ---\n${text.trim()}\n`;
 
-    // POST to Google Apps Script webhook
+    // POST to Google Apps Script webhook — append to separate "Wyle Manual Updates.md"
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: formattedText }),
+      body: JSON.stringify({ action: "append_updates", note: formattedText }),
     });
 
     if (!res.ok) {
