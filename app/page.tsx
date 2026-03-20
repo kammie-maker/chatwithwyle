@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useRef } from "react";
 
 interface Message { role: "user" | "assistant"; content: string }
+interface KbFile { id: string; name: string; modifiedDate: string }
+interface LogEntry { timestamp: string; trigger: string }
+
+type Tab = "chat" | "kb";
 
 export default function Home() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -10,18 +14,53 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Tab
+  const [activeTab, setActiveTab] = useState<Tab>("chat");
+
+  // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // KB state
+  const [kbFiles, setKbFiles] = useState<KbFile[]>([]);
+  const [kbFilesLoading, setKbFilesLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<KbFile | null>(null);
+  const [editorContent, setEditorContent] = useState("");
+  const [editorOriginal, setEditorOriginal] = useState("");
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [forceRewriteConfirm, setForceRewriteConfirm] = useState(false);
 
   // Check auth on mount
   useEffect(() => {
     fetch("/api/auth").then(r => r.json()).then(j => setAuthenticated(j.authenticated)).catch(() => setAuthenticated(false));
   }, []);
 
-  // Auto-scroll
+  // Auto-scroll chat
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Load KB data when switching to KB tab
+  useEffect(() => {
+    if (activeTab === "kb" && authenticated) {
+      loadKbFiles();
+      loadLog();
+    }
+  }, [activeTab, authenticated]);
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +81,6 @@ export default function Home() {
     setMessages([...updated, { role: "assistant", content: "" }]);
     setInput("");
     setStreaming(true);
-
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -60,13 +98,100 @@ export default function Home() {
         setMessages([...updated, { role: "assistant", content: fullText }]);
       }
     } catch {
-      setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again." }]);
+      setMessages([...updated, { role: "assistant", content: "Sorry, I\u2019m unable to respond right now. Please try again." }]);
     } finally {
       setStreaming(false);
     }
   }
 
   function clearConversation() { setMessages([]); }
+
+  // KB functions
+  async function loadKbFiles() {
+    setKbFilesLoading(true);
+    try {
+      const res = await fetch("/api/kb-files");
+      const data = await res.json();
+      setKbFiles(data.files || []);
+    } catch { setKbFiles([]); }
+    finally { setKbFilesLoading(false); }
+  }
+
+  async function loadLog() {
+    setLogLoading(true);
+    try {
+      const res = await fetch("/api/kb-log");
+      const data = await res.json();
+      setLogEntries((data.rewrites || []).slice(0, 10));
+    } catch { setLogEntries([]); }
+    finally { setLogLoading(false); }
+  }
+
+  async function openFile(file: KbFile) {
+    setSelectedFile(file);
+    setEditorLoading(true);
+    try {
+      const res = await fetch(`/api/kb-file?fileId=${encodeURIComponent(file.id)}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setEditorContent(data.content || "");
+      setEditorOriginal(data.content || "");
+    } catch (err) {
+      setToast("Failed to load file");
+      setSelectedFile(null);
+    } finally {
+      setEditorLoading(false);
+    }
+  }
+
+  async function saveFile() {
+    if (!selectedFile) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/kb-file", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: selectedFile.id, content: editorContent }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setEditorOriginal(editorContent);
+      setToast("File saved");
+      setConfirmRewrite(true);
+      loadKbFiles();
+    } catch {
+      setToast("Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setSelectedFile(null);
+    setEditorContent("");
+    setEditorOriginal("");
+  }
+
+  async function triggerRewrite() {
+    setRewriting(true);
+    setConfirmRewrite(false);
+    setForceRewriteConfirm(false);
+    try {
+      const res = await fetch("/api/kb-rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "", trigger: "manual" }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setToast("Rewrite complete");
+      loadLog();
+    } catch {
+      setToast("Rewrite failed");
+    } finally {
+      setRewriting(false);
+    }
+  }
 
   // ── Loading state ──
   if (authenticated === null) {
@@ -114,113 +239,361 @@ export default function Home() {
               borderRadius: "10px", background: "var(--color-mustard)", color: "var(--color-cream)",
               border: "none", fontFamily: "var(--font-body)", cursor: "pointer",
             }}>
-            {authLoading ? "Checking…" : "Enter"}
+            {authLoading ? "Checking\u2026" : "Enter"}
           </button>
         </form>
       </div>
     );
   }
 
-  // ── Chat UI ──
+  // ── Main app ──
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--color-cream)" }}>
-      {/* Header */}
-      <header className="shrink-0 flex items-center justify-between px-5 py-4 border-b" style={{ background: "#ffffff", borderColor: "rgba(22,22,22,0.06)" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 flex items-center justify-center shrink-0" style={{ background: "var(--color-mustard)", borderRadius: "10px" }}>
-            <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-base font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>Wyle</h1>
-            <p className="text-xs" style={{ color: "rgba(22,22,22,0.4)", fontFamily: "var(--font-body)" }}>Freewyld Foundry AI</p>
-          </div>
-        </div>
-        {messages.length > 0 && (
-          <button onClick={clearConversation} className="text-xs font-semibold px-3 py-1.5 transition-all"
-            style={{ borderRadius: "8px", background: "transparent", border: "1px solid rgba(22,22,22,0.1)", color: "rgba(22,22,22,0.4)", fontFamily: "var(--font-body)", cursor: "pointer" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.color = "var(--color-mustard)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"; e.currentTarget.style.color = "rgba(22,22,22,0.4)"; }}>
-            Clear
-          </button>
-        )}
-      </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
-        {messages.length === 0 && (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center" style={{ background: "rgba(204,138,57,0.1)", borderRadius: "16px" }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-8 h-8" style={{ color: "var(--color-mustard)" }}>
+      {/* Header with tabs */}
+      <header className="shrink-0 border-b" style={{ background: "#ffffff", borderColor: "rgba(22,22,22,0.06)" }}>
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 flex items-center justify-center shrink-0" style={{ background: "var(--color-mustard)", borderRadius: "10px" }}>
+              <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>How can I help?</h2>
-            <p className="text-sm" style={{ color: "rgba(22,22,22,0.45)", fontFamily: "var(--font-body)", maxWidth: 400, margin: "0 auto" }}>
-              Ask me anything about Freewyld Foundry, revenue management, or the short-term rental industry.
-            </p>
+            <div>
+              <h1 className="text-base font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>Wyle</h1>
+              <p className="text-xs" style={{ color: "rgba(22,22,22,0.4)", fontFamily: "var(--font-body)" }}>Freewyld Foundry AI</p>
+            </div>
           </div>
-        )}
+          {activeTab === "chat" && messages.length > 0 && (
+            <button onClick={clearConversation} className="text-xs font-semibold px-3 py-1.5 transition-all"
+              style={{ borderRadius: "8px", background: "transparent", border: "1px solid rgba(22,22,22,0.1)", color: "rgba(22,22,22,0.4)", fontFamily: "var(--font-body)", cursor: "pointer" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.color = "var(--color-mustard)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"; e.currentTarget.style.color = "rgba(22,22,22,0.4)"; }}>
+              Clear
+            </button>
+          )}
+        </div>
+        {/* Tabs */}
+        <div className="flex px-5 gap-1" style={{ fontFamily: "var(--font-body)" }}>
+          {(["chat", "kb"] as Tab[]).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="px-4 py-2 text-sm font-semibold transition-all"
+              style={{
+                borderRadius: "8px 8px 0 0",
+                background: activeTab === tab ? "var(--color-olive)" : "transparent",
+                color: activeTab === tab ? "var(--color-cream)" : "rgba(22,22,22,0.45)",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {tab === "chat" ? "Chat" : "Knowledge Base"}
+            </button>
+          ))}
+        </div>
+      </header>
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
-            {msg.role === "assistant" ? (
-              <div className="flex gap-3 max-w-[85%]">
-                <div className="w-7 h-7 shrink-0 flex items-center justify-center mt-0.5" style={{ background: "var(--color-mustard)", borderRadius: "8px" }}>
-                  <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4">
+      {/* Chat tab */}
+      {activeTab === "chat" && (
+        <>
+          <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
+            {messages.length === 0 && (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center" style={{ background: "rgba(204,138,57,0.1)", borderRadius: "16px" }}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-8 h-8" style={{ color: "var(--color-mustard)" }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                 </div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-body)" }}>
-                  {msg.content}
-                  {streaming && i === messages.length - 1 && (
-                    <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="inline-block max-w-[80%] px-4 py-2.5 text-sm" style={{
-                background: "var(--color-mustard)", borderRadius: "16px 16px 4px 16px",
-                color: "var(--color-cream)", fontFamily: "var(--font-body)",
-              }}>
-                {msg.content}
+                <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>How can I help?</h2>
+                <p className="text-sm" style={{ color: "rgba(22,22,22,0.45)", fontFamily: "var(--font-body)", maxWidth: 400, margin: "0 auto" }}>
+                  Ask me anything about Freewyld Foundry, revenue management, or the short-term rental industry.
+                </p>
               </div>
             )}
+            {messages.map((msg, i) => (
+              <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
+                {msg.role === "assistant" ? (
+                  <div className="flex gap-3 max-w-[85%]">
+                    <div className="w-7 h-7 shrink-0 flex items-center justify-center mt-0.5" style={{ background: "var(--color-mustard)", borderRadius: "8px" }}>
+                      <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-body)" }}>
+                      {msg.content}
+                      {streaming && i === messages.length - 1 && (
+                        <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inline-block max-w-[80%] px-4 py-2.5 text-sm" style={{
+                    background: "var(--color-mustard)", borderRadius: "16px 16px 4px 16px",
+                    color: "var(--color-cream)", fontFamily: "var(--font-body)",
+                  }}>
+                    {msg.content}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
           </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+          <div className="shrink-0 px-4 py-4 border-t" style={{ background: "#ffffff", borderColor: "rgba(22,22,22,0.06)" }}>
+            <div className="flex gap-2" style={{ maxWidth: 720, margin: "0 auto" }}>
+              <input
+                className="flex-1 px-4 py-3 text-sm focus:outline-none transition-all"
+                style={{
+                  borderRadius: "12px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)",
+                  color: "var(--color-onyx)", fontFamily: "var(--font-body)",
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                placeholder="Ask Wyle anything\u2026"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                disabled={streaming}
+              />
+              <button
+                onClick={handleSend}
+                disabled={streaming || !input.trim()}
+                className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
+                style={{
+                  borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-cream)",
+                  border: "none", fontFamily: "var(--font-body)", cursor: "pointer",
+                }}>
+                Send
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-      {/* Input */}
-      <div className="shrink-0 px-4 py-4 border-t" style={{ background: "#ffffff", borderColor: "rgba(22,22,22,0.06)" }}>
-        <div className="flex gap-2" style={{ maxWidth: 720, margin: "0 auto" }}>
-          <input
-            className="flex-1 px-4 py-3 text-sm focus:outline-none transition-all"
-            style={{
-              borderRadius: "12px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)",
-              color: "var(--color-onyx)", fontFamily: "var(--font-body)",
-            }}
-            onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
-            onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
-            placeholder="Ask Wyle anything…"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            disabled={streaming}
-          />
-          <button
-            onClick={handleSend}
-            disabled={streaming || !input.trim()}
-            className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
-            style={{
-              borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-cream)",
-              border: "none", fontFamily: "var(--font-body)", cursor: "pointer",
-            }}>
-            Send
-          </button>
+      {/* Knowledge Base tab */}
+      {activeTab === "kb" && (
+        <div className="flex-1 flex overflow-hidden" style={{ fontFamily: "var(--font-body)" }}>
+          {/* Panel 1: Source Files */}
+          <div className="shrink-0 overflow-y-auto border-r" style={{ width: 260, borderColor: "rgba(22,22,22,0.06)" }}>
+            <div className="px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>Source Files</h2>
+            </div>
+            {kbFilesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+              </div>
+            ) : kbFiles.length === 0 ? (
+              <p className="text-xs px-4 py-4" style={{ color: "rgba(22,22,22,0.4)" }}>No source files found</p>
+            ) : (
+              kbFiles.map(file => (
+                <button
+                  key={file.id}
+                  onClick={() => openFile(file)}
+                  className="w-full text-left px-4 py-3 border-b transition-all"
+                  style={{
+                    borderColor: "rgba(22,22,22,0.04)",
+                    background: selectedFile?.id === file.id ? "rgba(60,59,34,0.08)" : "transparent",
+                    cursor: "pointer",
+                    border: "none",
+                    borderBottom: "1px solid rgba(22,22,22,0.04)",
+                  }}
+                  onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(22,22,22,0.03)"; }}
+                  onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div className="text-sm font-medium truncate" style={{ color: "var(--color-onyx)" }}>{file.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "rgba(22,22,22,0.4)" }}>
+                    {new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Panel 2: Editor */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {!selectedFile ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm" style={{ color: "rgba(22,22,22,0.35)" }}>Select a file to edit</p>
+              </div>
+            ) : editorLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+              </div>
+            ) : (
+              <>
+                <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                  <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>{selectedFile.name}</h2>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={cancelEdit}
+                      className="px-3 py-1.5 text-xs font-semibold transition-all"
+                      style={{
+                        borderRadius: "6px", background: "transparent",
+                        border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveFile}
+                      disabled={saving || editorContent === editorOriginal}
+                      className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
+                      style={{
+                        borderRadius: "6px", background: "var(--color-mustard)",
+                        color: "var(--color-cream)", border: "none", cursor: "pointer",
+                      }}
+                    >
+                      {saving ? "Saving\u2026" : "Save"}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={editorContent}
+                  onChange={e => setEditorContent(e.target.value)}
+                  className="flex-1 w-full p-4 resize-none focus:outline-none"
+                  style={{
+                    fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    color: "var(--color-onyx)",
+                    background: "var(--color-cream)",
+                    border: "none",
+                  }}
+                  spellCheck={false}
+                />
+              </>
+            )}
+          </div>
+
+          {/* Panel 3: Rewrite Log */}
+          <div className="shrink-0 overflow-y-auto border-l" style={{ width: 280, borderColor: "rgba(22,22,22,0.06)" }}>
+            <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>Rewrite Log</h2>
+              <button
+                onClick={() => setForceRewriteConfirm(true)}
+                disabled={rewriting}
+                className="px-2.5 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
+                style={{
+                  borderRadius: "6px", background: "var(--color-bark)",
+                  color: "var(--color-cream)", border: "none", cursor: "pointer",
+                }}
+              >
+                {rewriting ? "Rewriting\u2026" : "Force Rewrite Now"}
+              </button>
+            </div>
+            {logLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+              </div>
+            ) : logEntries.length === 0 ? (
+              <p className="text-xs px-4 py-4" style={{ color: "rgba(22,22,22,0.4)" }}>No rewrite history</p>
+            ) : (
+              logEntries.map((entry, i) => (
+                <div key={i} className="px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.04)" }}>
+                  <div className="text-xs font-medium" style={{ color: "var(--color-onyx)" }}>
+                    {new Date(entry.timestamp).toLocaleString("en-US", {
+                      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                    })}
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: "rgba(22,22,22,0.45)" }}>
+                    Trigger: {entry.trigger}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 px-4 py-2.5 text-sm font-medium shadow-lg" style={{
+          borderRadius: "10px", background: "var(--color-onyx)", color: "var(--color-cream)",
+          fontFamily: "var(--font-body)",
+        }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Confirm rewrite after save */}
+      {confirmRewrite && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.4)", zIndex: 50 }}>
+          <div style={{
+            width: 400, background: "#ffffff", borderRadius: "16px",
+            padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.15)",
+          }}>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>
+              Trigger rewrite now?
+            </h3>
+            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>
+              Apply your changes to the compiled knowledge base now?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmRewrite(false)}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  borderRadius: "8px", background: "transparent",
+                  border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer",
+                }}
+              >
+                No
+              </button>
+              <button
+                onClick={triggerRewrite}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  borderRadius: "8px", background: "var(--color-mustard)",
+                  color: "var(--color-cream)", border: "none", cursor: "pointer",
+                }}
+              >
+                Yes, rewrite now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Force rewrite confirm */}
+      {forceRewriteConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.4)", zIndex: 50 }}>
+          <div style={{
+            width: 400, background: "#ffffff", borderRadius: "16px",
+            padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.15)",
+          }}>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--color-onyx)" }}>
+              Force rewrite?
+            </h3>
+            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>
+              This will recompile the entire knowledge base from all source files. It may take a few minutes.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setForceRewriteConfirm(false)}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  borderRadius: "8px", background: "transparent",
+                  border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={triggerRewrite}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  borderRadius: "8px", background: "var(--color-bark)",
+                  color: "var(--color-cream)", border: "none", cursor: "pointer",
+                }}
+              >
+                Rewrite now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
