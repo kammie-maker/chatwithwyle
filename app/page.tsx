@@ -4,8 +4,12 @@ import React, { useState, useEffect, useRef } from "react";
 
 type ContentBlock =
   | { type: "text"; text: string }
-  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+  | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
 interface Message { role: "user" | "assistant"; content: string | ContentBlock[] }
+interface PendingFile { name: string; base64: string; mediaType: string; preview: string | null; fileType: "image" | "pdf" | "text" }
+const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
 interface KbFile { id: string; name: string; modifiedDate: string }
 interface LogEntry { timestamp: string; trigger: string }
 
@@ -39,9 +43,10 @@ export default function Home() {
   const [streaming, setStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Image upload state
-  const [pendingImage, setPendingImage] = useState<{ base64: string; mediaType: string; preview: string } | null>(null);
+  // File upload state
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
 
   // KB state
   const [kbFiles, setKbFiles] = useState<KbFile[]>([]);
@@ -99,16 +104,32 @@ export default function Home() {
     finally { setAuthLoading(false); }
   }
 
-  async function sendMessage(text: string, image?: { base64: string; mediaType: string; preview: string } | null) {
-    if ((!text.trim() && !image) || streaming) return;
-    const attachedImage = image || pendingImage;
+  function autoResizeTextarea() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }
 
-    // Build user message content
+  async function sendMessage(text: string) {
+    if (!text.trim() && pendingFiles.length === 0) return;
+    if (streaming) return;
+
+    // Build content blocks: files first, then text
     let userContent: string | ContentBlock[];
-    if (attachedImage) {
-      const blocks: ContentBlock[] = [
-        { type: "image", source: { type: "base64", media_type: attachedImage.mediaType, data: attachedImage.base64 } },
-      ];
+    if (pendingFiles.length > 0) {
+      const blocks: ContentBlock[] = [];
+      for (const f of pendingFiles) {
+        if (f.fileType === "image") {
+          blocks.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.base64 } });
+        } else if (f.fileType === "pdf") {
+          blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.base64 } });
+        } else {
+          // Text files: decode base64 and send as text block
+          const decoded = atob(f.base64);
+          blocks.push({ type: "text", text: `--- ${f.name} ---\n${decoded}` });
+        }
+      }
       if (text.trim()) blocks.push({ type: "text", text: text.trim() });
       userContent = blocks;
     } else {
@@ -119,7 +140,8 @@ export default function Home() {
     const updated = [...messages, userMsg];
     setMessages([...updated, { role: "assistant", content: "" }]);
     setInput("");
-    setPendingImage(null);
+    setPendingFiles([]);
+    if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
     setStreaming(true);
     try {
       const res = await fetch("/api/chat", {
@@ -146,22 +168,44 @@ export default function Home() {
 
   function handleSend() { sendMessage(input); }
 
-  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setToast("Image must be under 5MB");
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = e.target.files;
+    if (!fileList) return;
+    const files = Array.from(fileList);
+    const currentCount = pendingFiles.length;
+    if (currentCount + files.length > 10) {
+      setToast("Maximum 10 files at once");
+      e.target.value = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1];
-      setPendingImage({ base64, mediaType: file.type, preview: result });
-    };
-    reader.readAsDataURL(file);
-    // Reset input so same file can be selected again
+    for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        setToast(`${file.name} exceeds 10MB limit`);
+        continue;
+      }
+      const isImage = IMAGE_TYPES.includes(file.type);
+      const isPdf = file.type === "application/pdf";
+      const isText = /\.(txt|md|csv)$/i.test(file.name);
+      if (!isImage && !isPdf && !isText) continue;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        const preview = isImage ? result : null;
+        const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text";
+        setPendingFiles(prev => {
+          if (prev.length >= 10) return prev;
+          return [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }];
+        });
+      };
+      reader.readAsDataURL(file);
+    }
     e.target.value = "";
+  }
+
+  function removePendingFile(index: number) {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
   }
 
   function clearConversation() { setMessages([]); }
@@ -417,14 +461,24 @@ export default function Home() {
               </div>
             )}
             {messages.map((msg, i) => {
-              // Extract text and image from message content
+              // Extract text and media from message content
               const contentBlocks = Array.isArray(msg.content) ? msg.content : null;
-              const textContent = contentBlocks
-                ? (contentBlocks.find((b): b is { type: "text"; text: string } => b.type === "text")?.text || "")
+              const textBlocks = contentBlocks
+                ? contentBlocks.filter((b): b is { type: "text"; text: string } => b.type === "text")
+                : [];
+              const userText = contentBlocks
+                ? textBlocks.filter(b => !b.text.startsWith("--- ")).map(b => b.text).join("\n")
                 : (msg.content as string);
-              const imageBlock = contentBlocks
-                ? contentBlocks.find((b): b is ContentBlock & { type: "image" } => b.type === "image")
-                : null;
+              const fileTextBlocks = contentBlocks
+                ? textBlocks.filter(b => b.text.startsWith("--- "))
+                : [];
+              const imageBlocks = contentBlocks
+                ? contentBlocks.filter((b): b is ContentBlock & { type: "image" } => b.type === "image")
+                : [];
+              const docBlocks = contentBlocks
+                ? contentBlocks.filter((b): b is ContentBlock & { type: "document" } => b.type === "document")
+                : [];
+              const hasMedia = imageBlocks.length > 0 || docBlocks.length > 0 || fileTextBlocks.length > 0;
 
               return (
               <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
@@ -436,7 +490,7 @@ export default function Home() {
                       </svg>
                     </div>
                     <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-body)" }}>
-                      {textContent}
+                      {userText}
                       {streaming && i === messages.length - 1 && (
                         <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />
                       )}
@@ -446,17 +500,33 @@ export default function Home() {
                   <div className="inline-block max-w-[80%] text-sm" style={{
                     background: "var(--color-mustard)", borderRadius: "16px 16px 4px 16px",
                     color: "var(--color-cream)", fontFamily: "var(--font-body)",
-                    padding: imageBlock ? "0.5rem" : undefined,
+                    padding: hasMedia ? "0.5rem" : undefined,
                   }}>
-                    {imageBlock && (
+                    {imageBlocks.map((img, j) => (
                       <img
-                        src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`}
+                        key={j}
+                        src={`data:${img.source.media_type};base64,${img.source.data}`}
                         alt="Uploaded"
-                        style={{ maxWidth: 200, borderRadius: "10px", display: "block", marginBottom: textContent ? "0.5rem" : 0 }}
+                        style={{ maxWidth: 200, borderRadius: "10px", display: "block", marginBottom: "0.5rem" }}
                       />
-                    )}
-                    {textContent && (
-                      <div style={{ padding: imageBlock ? "0 0.5rem 0.5rem" : "0.625rem 1rem" }}>{textContent}</div>
+                    ))}
+                    {docBlocks.map((_, j) => (
+                      <div key={`doc-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.2)", borderRadius: "6px", fontSize: "11px" }}>
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                        PDF attached
+                      </div>
+                    ))}
+                    {fileTextBlocks.map((ftb, j) => {
+                      const fname = ftb.text.match(/^--- (.+?) ---/)?.[1] || "file";
+                      return (
+                        <div key={`ftb-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.2)", borderRadius: "6px", fontSize: "11px" }}>
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                          {fname}
+                        </div>
+                      );
+                    })}
+                    {userText && (
+                      <div style={{ padding: hasMedia ? "0 0.5rem 0.5rem" : "0.625rem 1rem" }}>{userText}</div>
                     )}
                   </div>
                 )}
@@ -467,72 +537,91 @@ export default function Home() {
           </div>
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "#ffffff", borderColor: "rgba(22,22,22,0.06)" }}>
             <div style={{ maxWidth: 720, margin: "0 auto" }}>
-              {/* Image preview */}
-              {pendingImage && (
-                <div className="mb-2 flex items-start gap-2">
-                  <div className="relative inline-block">
-                    <img src={pendingImage.preview} alt="Preview" style={{ maxWidth: 120, maxHeight: 80, borderRadius: "8px", display: "block" }} />
-                    <button
-                      onClick={() => setPendingImage(null)}
-                      className="absolute flex items-center justify-center"
-                      style={{
-                        top: -6, right: -6, width: 20, height: 20, borderRadius: "50%",
-                        background: "var(--color-onyx)", color: "var(--color-cream)",
-                        border: "2px solid #ffffff", cursor: "pointer", fontSize: "11px", lineHeight: 1,
-                        padding: 0,
-                      }}
-                    >
-                      &times;
-                    </button>
-                  </div>
+              {/* File previews */}
+              {pendingFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap items-start gap-2">
+                  {pendingFiles.map((f, idx) => (
+                    <div key={idx} className="relative inline-block">
+                      {f.preview ? (
+                        <img src={f.preview} alt={f.name} style={{ maxWidth: 80, maxHeight: 60, borderRadius: "8px", display: "block" }} />
+                      ) : (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs" style={{
+                          borderRadius: "8px", background: "var(--color-cream)",
+                          border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)",
+                          fontFamily: "var(--font-body)", maxWidth: 140,
+                        }}>
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                          <span className="truncate">{f.name}</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => removePendingFile(idx)}
+                        className="absolute flex items-center justify-center"
+                        style={{
+                          top: -6, right: -6, width: 20, height: 20, borderRadius: "50%",
+                          background: "var(--color-onyx)", color: "var(--color-cream)",
+                          border: "2px solid #ffffff", cursor: "pointer", fontSize: "11px", lineHeight: 1,
+                          padding: 0,
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-end">
                 <input
                   type="file"
                   ref={fileInputRef}
-                  onChange={handleImageSelect}
-                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  onChange={handleFileSelect}
+                  accept={ACCEPTED_TYPES}
+                  multiple
                   className="hidden"
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={streaming}
+                  disabled={streaming || pendingFiles.length >= 10}
                   className="shrink-0 flex items-center justify-center disabled:opacity-40 transition-all"
                   style={{
-                    width: 44, height: 44, borderRadius: "12px",
+                    width: 44, minHeight: 44, borderRadius: "12px",
                     background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)",
                     cursor: "pointer", color: "rgba(22,22,22,0.4)",
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.color = "var(--color-mustard)"; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.color = "rgba(22,22,22,0.4)"; }}
-                  title="Attach image"
+                  title="Attach files"
                 >
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                   </svg>
                 </button>
-                <input
+                <textarea
+                  ref={textareaRef}
                   className="flex-1 px-4 py-3 text-sm focus:outline-none transition-all"
+                  rows={1}
                   style={{
                     borderRadius: "12px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)",
                     color: "var(--color-onyx)", fontFamily: "var(--font-body)",
+                    resize: "none", overflow: "hidden", maxHeight: 200,
                   }}
                   onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
                   placeholder="Ask Wyle anything\u2026"
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                  }}
                   disabled={streaming}
                 />
                 <button
                   onClick={handleSend}
-                  disabled={streaming || (!input.trim() && !pendingImage)}
+                  disabled={streaming || (!input.trim() && pendingFiles.length === 0)}
                   className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
                   style={{
                     borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-cream)",
-                    border: "none", fontFamily: "var(--font-body)", cursor: "pointer",
+                    border: "none", fontFamily: "var(--font-body)", cursor: "pointer", minHeight: 44,
                   }}>
                   Send
                 </button>
