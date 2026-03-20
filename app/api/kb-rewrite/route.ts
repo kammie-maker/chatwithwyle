@@ -97,9 +97,6 @@ export async function POST(req: Request) {
     }
 
     // Step 3: Write rewritten content back to KB doc (overwrite)
-    const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
-    if (!webhookUrl) return Response.json({ error: "WYLE_KB_WEBHOOK_URL not configured" }, { status: 500 });
-
     const writeRes = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
