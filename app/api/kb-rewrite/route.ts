@@ -48,25 +48,35 @@ export async function POST(req: Request) {
 
     // If Drive URL returned HTML (virus scan page) or failed, try via Apps Script
     if (!currentKb.trim() || currentKb.includes("<!DOCTYPE") || currentKb.includes("<html")) {
-      console.log("[kb-rewrite] Drive URL returned HTML or empty, trying Apps Script read...");
+      console.log(`[kb-rewrite] Drive URL result: ok=${kbRes.ok}, status=${kbRes.status}, contentLength=${currentKb.length}, isHTML=${currentKb.includes("<html")}`);
+      console.log("[kb-rewrite] Trying Apps Script read_kb...");
       const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
       if (webhookUrl) {
-        const scriptRes = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "read_kb" }),
-          redirect: "follow",
-        });
-        if (scriptRes.ok) {
-          const scriptData = await scriptRes.json();
-          currentKb = scriptData.content || "";
+        try {
+          const scriptRes = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "read_kb" }),
+            redirect: "follow",
+          });
+          const rawText = await scriptRes.text();
+          console.log(`[kb-rewrite] Apps Script response: status=${scriptRes.status}, length=${rawText.length}, preview=${rawText.slice(0, 200)}`);
+          try {
+            const scriptData = JSON.parse(rawText);
+            currentKb = scriptData.content || "";
+          } catch {
+            console.log("[kb-rewrite] Apps Script response not JSON, using raw text");
+            if (!rawText.includes("<html") && !rawText.includes("<!DOCTYPE")) {
+              currentKb = rawText;
+            }
+          }
+        } catch (fetchErr) {
+          console.error("[kb-rewrite] Apps Script fetch error:", fetchErr);
         }
       }
     }
 
     if (!currentKb.trim()) return Response.json({ error: "Failed to fetch KB content from any source" }, { status: 502 });
-
-    if (!currentKb.trim()) return Response.json({ error: "KB content is empty" }, { status: 500 });
 
     console.log(`[kb-rewrite] Fetched KB: ${currentKb.length} chars`);
 
