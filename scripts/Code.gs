@@ -50,7 +50,7 @@ function handleReadAllSources(data) {
   while (files.hasNext()) {
     var file = files.next();
     var name = file.getName();
-    if (name.endsWith(".md") && file.getId() !== MASTER_FILE_ID) {
+    if (file.getId() !== MASTER_FILE_ID && name !== LOG_FILE_NAME) {
       sources.push({
         name: name,
         content: file.getBlob().getDataAsString()
@@ -119,7 +119,7 @@ function handleListFiles(data) {
   while (files.hasNext()) {
     var file = files.next();
     var name = file.getName();
-    if (name.endsWith(".md") && file.getId() !== MASTER_FILE_ID) {
+    if (file.getId() !== MASTER_FILE_ID && name !== LOG_FILE_NAME) {
       result.push({
         id: file.getId(),
         name: name,

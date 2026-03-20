@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       model: "claude-sonnet-4-6",
       max_tokens: 2048,
       system: systemPrompt,
-      messages: messages.map((m: { role: string; content: string }) => ({
+      messages: messages.map((m: { role: string; content: string | unknown[] }) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       })),
