@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getLastKbUpdate } from "../kb-update/route";
 
+// Allow up to 5 minutes for the rewrite (Claude processing + Drive writes)
+export const maxDuration = 300;
+
 // Make cache-bust accessible
 let lastRewriteTimestamp = 0;
 export function getLastRewrite() { return lastRewriteTimestamp; }
