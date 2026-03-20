@@ -36,12 +36,35 @@ export async function POST(req: Request) {
     console.log(`[kb-rewrite] Starting rewrite (trigger: ${effectiveTrigger})`);
 
     // Step 1: Fetch current KB content
-    const kbUrl = process.env.GOOGLE_DRIVE_KB_URL;
-    if (!kbUrl) return Response.json({ error: "GOOGLE_DRIVE_KB_URL not configured" }, { status: 500 });
+    // Try GOOGLE_DRIVE_KB_URL first, fallback to direct Drive download URL
+    const kbUrl = process.env.GOOGLE_DRIVE_KB_URL || "https://drive.google.com/uc?export=download&id=1IjtO_gdiK2-lFevZ66E6KRTuzy-J89xp";
+    console.log(`[kb-rewrite] Fetching KB from: ${kbUrl}`);
 
-    const kbRes = await fetch(kbUrl, { cache: "no-store" });
-    if (!kbRes.ok) return Response.json({ error: `Failed to fetch KB: ${kbRes.status}` }, { status: 502 });
-    const currentKb = await kbRes.text();
+    let currentKb = "";
+    const kbRes = await fetch(kbUrl, { cache: "no-store", redirect: "follow" });
+    if (kbRes.ok) {
+      currentKb = await kbRes.text();
+    }
+
+    // If Drive URL returned HTML (virus scan page) or failed, try via Apps Script
+    if (!currentKb.trim() || currentKb.includes("<!DOCTYPE") || currentKb.includes("<html")) {
+      console.log("[kb-rewrite] Drive URL returned HTML or empty, trying Apps Script read...");
+      const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
+      if (webhookUrl) {
+        const scriptRes = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "read_kb" }),
+          redirect: "follow",
+        });
+        if (scriptRes.ok) {
+          const scriptData = await scriptRes.json();
+          currentKb = scriptData.content || "";
+        }
+      }
+    }
+
+    if (!currentKb.trim()) return Response.json({ error: "Failed to fetch KB content from any source" }, { status: 502 });
 
     if (!currentKb.trim()) return Response.json({ error: "KB content is empty" }, { status: 500 });
 
