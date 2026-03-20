@@ -38,34 +38,52 @@ export async function POST(req: Request) {
 
     console.log(`[kb-rewrite] Starting rewrite (trigger: ${effectiveTrigger})`);
 
-    // Step 1: Fetch current KB content via Apps Script read_kb action
     const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
     if (!webhookUrl) return Response.json({ error: "WYLE_KB_WEBHOOK_URL not configured" }, { status: 500 });
 
-    console.log("[kb-rewrite] Fetching KB via Apps Script read_kb...");
-    const kbRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "read_kb" }),
-      redirect: "follow",
-    });
+    // Step 1: Fetch current KB content directly from Google Drive
+    const kbFileId = "1IjtO_gdiK2-lFevZ66E6KRTuzy-J89xp";
+    const driveUrl = `https://drive.google.com/uc?export=download&id=${kbFileId}`;
 
-    const rawText = await kbRes.text();
-    console.log(`[kb-rewrite] Apps Script response: status=${kbRes.status}, length=${rawText.length}`);
-
+    console.log("[kb-rewrite] Fetching KB from Google Drive...");
     let currentKb = "";
-    try {
-      const parsed = JSON.parse(rawText);
-      if (parsed.error) return Response.json({ error: `Apps Script error: ${parsed.error}` }, { status: 502 });
-      currentKb = parsed.content || "";
-    } catch {
-      // If not JSON but looks like KB content (not HTML), use it directly
-      if (rawText && !rawText.includes("<html") && !rawText.includes("<!DOCTYPE")) {
-        currentKb = rawText;
+
+    // Google Drive download URLs redirect — need to follow
+    const kbRes = await fetch(driveUrl, { redirect: "follow" });
+    if (kbRes.ok) {
+      const text = await kbRes.text();
+      // Check it's not an HTML error/virus scan page
+      if (text && !text.trimStart().startsWith("<")) {
+        currentKb = text;
       }
     }
 
-    if (!currentKb.trim()) return Response.json({ error: "KB content is empty or could not be read" }, { status: 502 });
+    // Fallback: try via Apps Script
+    if (!currentKb.trim()) {
+      console.log("[kb-rewrite] Drive direct failed, trying Apps Script...");
+      if (webhookUrl) {
+        try {
+          const scriptRes = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "read_kb" }),
+            redirect: "follow",
+          });
+          const raw = await scriptRes.text();
+          try {
+            const parsed = JSON.parse(raw);
+            currentKb = parsed.content || "";
+          } catch {
+            if (raw && !raw.trimStart().startsWith("<")) currentKb = raw;
+          }
+        } catch (e) {
+          console.error("[kb-rewrite] Apps Script read failed:", e);
+        }
+      }
+    }
+
+    if (!currentKb.trim()) return Response.json({ error: "Failed to fetch KB content" }, { status: 502 });
+    console.log(`[kb-rewrite] KB fetched: ${currentKb.length} chars`);
 
     console.log(`[kb-rewrite] Fetched KB: ${currentKb.length} chars`);
 
