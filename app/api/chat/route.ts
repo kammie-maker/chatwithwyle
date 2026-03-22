@@ -66,6 +66,8 @@ async function buildSystemPrompt(mode: ChatMode): Promise<string> {
   const [agents, kb] = await Promise.all([fetchAgentFiles(), fetchKnowledgeBase()]);
 
   const persona = agents.persona || FALLBACK_PERSONA;
+  console.log(`[chat] Persona: ${agents.persona ? agents.persona.length + " chars from Drive" : "using fallback"}`);
+  console.log(`[chat] Agents: sales=${agents.sales.length}, ceo=${agents.ceo.length}, rev=${agents.revenueExpert.length}`);
   const routing = MODE_ROUTING[mode] || MODE_ROUTING.sales;
 
   const parts: string[] = [];
@@ -97,6 +99,9 @@ async function buildSystemPrompt(mode: ChatMode): Promise<string> {
   const skill = SKILL_MAP[mode];
   if (skill) {
     parts.push("=== RESPONSE FORMAT (Skill File — follow exactly) ===\n" + skill);
+    console.log(`[chat] Skill file included for mode "${mode}": ${skill.length} chars`);
+  } else {
+    console.log(`[chat] WARNING: No skill file found for mode "${mode}"`);
   }
 
   // 5. Knowledge base

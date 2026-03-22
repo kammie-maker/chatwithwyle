@@ -34,7 +34,7 @@ export async function fetchAgentFiles(): Promise<AgentFiles> {
     const find = (name: string) => sources.find(s => s.name === name)?.content || "";
 
     const result: AgentFiles = {
-      persona: find("Wyle-Persona.md"),
+      persona: find("Persona-Wyle.md"),
       sales: find("Agent-Sales.md"),
       ceo: find("Agent-CEO.md"),
       revenueExpert: find("Agent-RevenueExpert.md"),

@@ -78,6 +78,7 @@ const SECTION_HEADERS = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE",
 const EXPAND_ORDER = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
 
 function parseResponse(text: string): ParsedResponse {
+  // Strip tokens that should never render
   let raw = text.replace(/\[\[EXPAND_PROMPT\]\]/g, "").trim();
   let clarify: ParsedResponse["clarify"] = null;
 
@@ -92,24 +93,34 @@ function parseResponse(text: string): ParsedResponse {
   }
 
   const sections: ParsedSection[] = [];
-  const headerPattern = /^#{2,4}\s+(SIMPLE|DEEPER|DEEPEST|INTERNAL FULL PICTURE|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm;
-  const matches: { key: string; index: number }[] = [];
+  // Match ## SIMPLE, ### SIMPLE, **SIMPLE**, or standalone SIMPLE/DEEPER/etc on its own line
+  const sectionNames = "SIMPLE|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION";
+  const headerPattern = new RegExp("^(?:#{2,4}\\s+|\\*\\*)?(" + sectionNames + ")(?:\\*\\*)?\\s*$", "gm");
+  const matches: { key: string; index: number; fullMatch: string }[] = [];
   let m;
   while ((m = headerPattern.exec(raw)) !== null) {
-    matches.push({ key: m[1], index: m.index });
+    const key = m[1] === "INTERNAL" ? "INTERNAL FULL PICTURE" : m[1];
+    matches.push({ key, index: m.index, fullMatch: m[0] });
   }
 
   if (matches.length === 0) {
+    // No structured sections found — check if response contains expand-worthy content anyway
+    // Treat entire response as SIMPLE with hasStructure false
     return { sections: [{ key: "SIMPLE", label: "SIMPLE", content: raw }], clarify, raw, hasStructure: false };
   }
 
   for (let j = 0; j < matches.length; j++) {
-    const start = matches[j].index + raw.substring(matches[j].index).indexOf("\n") + 1;
+    const headerEnd = matches[j].index + matches[j].fullMatch.length;
+    const contentStart = raw.indexOf("\n", headerEnd);
+    const start = contentStart !== -1 ? contentStart + 1 : headerEnd;
     const end = j + 1 < matches.length ? matches[j + 1].index : raw.length;
-    sections.push({ key: matches[j].key, label: matches[j].key, content: raw.substring(start, end).trim() });
+    const content = raw.substring(start, end).trim();
+    if (content) {
+      sections.push({ key: matches[j].key, label: matches[j].key === "INTERNAL FULL PICTURE" ? "INTERNAL" : matches[j].key, content });
+    }
   }
 
-  return { sections, clarify, raw, hasStructure: true };
+  return { sections, clarify, raw, hasStructure: sections.length > 0 };
 }
 
 const MODE_ACTIONS: Record<ChatMode, string[]> = {
@@ -513,7 +524,7 @@ export default function Home() {
                   style={{ borderRadius: "12px", background: "var(--bg-card)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)", resize: "none", overflow: "hidden", maxHeight: 200 }}
                   onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
-                  placeholder="Ask Wyle anything\u2026" value={input} onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
+                  placeholder="Ask Wyle anything..." value={input} onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} disabled={streaming} />
                 <button onClick={handleSend} disabled={streaming || (!input.trim() && pendingFiles.length === 0)} className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
                   style={{ borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer", minHeight: 44 }}>
