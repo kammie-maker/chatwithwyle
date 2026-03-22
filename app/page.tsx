@@ -556,6 +556,23 @@ export default function Home() {
       {/* ── Chat tab ── */}
       {activeTab === "chat" && (
         <>
+          {/* Interaction mode toggle — fixed at top center */}
+          <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
+            <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
+              <button onClick={() => setInteractionMode("client")}
+                style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
+                  background: interactionMode === "client" ? "#3c3b22" : "transparent",
+                  color: interactionMode === "client" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
+                Client Interaction
+              </button>
+              <button onClick={() => setInteractionMode("research")}
+                style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
+                  background: interactionMode === "research" ? "#3c3b22" : "transparent",
+                  color: interactionMode === "research" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
+                Internal Research
+              </button>
+            </div>
+          </div>
           <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
               <div className="text-center py-12">
@@ -612,21 +629,6 @@ export default function Home() {
           {/* Input area */}
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
             <div style={{ maxWidth: 720, margin: "0 auto" }}>
-              {/* Interaction mode toggle */}
-              <div className="flex items-center mb-2" style={{ gap: 2 }}>
-                <button onClick={() => setInteractionMode("client")}
-                  style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: "6px 0 0 6px", border: "1px solid rgba(22,22,22,0.12)", cursor: "pointer", fontFamily: "var(--font-body)",
-                    background: interactionMode === "client" ? "#3c3b22" : "transparent",
-                    color: interactionMode === "client" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
-                  Client Interaction
-                </button>
-                <button onClick={() => setInteractionMode("research")}
-                  style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: "0 6px 6px 0", border: "1px solid rgba(22,22,22,0.12)", borderLeft: "none", cursor: "pointer", fontFamily: "var(--font-body)",
-                    background: interactionMode === "research" ? "#3c3b22" : "transparent",
-                    color: interactionMode === "research" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
-                  Internal Research
-                </button>
-              </div>
               {pendingFiles.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-start gap-2">
                   {pendingFiles.map((f, idx) => (
