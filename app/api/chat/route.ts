@@ -48,7 +48,7 @@ Be conversational, helpful, and professional. Use the knowledge base below to in
 
 const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EVERY RESPONSE IN EVERY MODE WITHOUT EXCEPTION:
 
-- Never use em dashes anywhere in any response
+- NEVER use em dashes (\u2014) or en dashes (\u2013) under any circumstances. If you feel the urge to use a dash, rewrite the sentence instead. This rule has zero exceptions.
 - Never use colons anywhere in response text
 - Never use bold text inside paragraphs
 - Assume every query is mid-conversation
@@ -68,7 +68,7 @@ A direct, concise answer to the question in 2-3 sentences. Speak to the rep. No 
 [[EXPAND_PROMPT]]
 
 FORMATTING RULES:
-- Never use em dashes
+- NEVER use em dashes or en dashes under any circumstances. Rewrite the sentence instead. Zero exceptions.
 - Never use colons in response text
 - Never use bold text inside paragraphs
 - Assume mid-conversation
