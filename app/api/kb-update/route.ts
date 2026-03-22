@@ -1,4 +1,4 @@
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 // Reference to the KB cache in /api/chat — we'll export a cache-bust timestamp
 // that /api/chat checks on each request
@@ -10,8 +10,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { text } = body;
 
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return Response.json({ error: "text is required" }, { status: 400 });

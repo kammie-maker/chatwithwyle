@@ -1,9 +1,9 @@
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const { fileName, content } = await req.json();
     if (!fileName) return Response.json({ error: "fileName required" }, { status: 400 });

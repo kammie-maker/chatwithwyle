@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 export const maxDuration = 120;
 
@@ -12,8 +12,8 @@ Mark changes using ONLY these tokens:
 Return the complete document with change markers. No preamble. No explanation. No code fences. Just the document with markers.`;
 
 export async function POST(req: Request) {
-  const session = await getServerSession();
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const { authorized } = await requireAdmin();
+  if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });

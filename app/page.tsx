@@ -1180,7 +1180,7 @@ ${context}`;
       )}
 
       {/* ── Knowledge Base tab ── */}
-      {activeTab === "kb" && (
+      {activeTab === "kb" && isAdminUser && (
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Source Files */}
           <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>

@@ -1,9 +1,9 @@
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 export async function GET() {
   try {
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
     const password = process.env.WYLE_PASSWORD;

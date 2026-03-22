@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 // Allow up to 5 minutes for the rewrite
 export const maxDuration = 300;
@@ -31,8 +31,8 @@ export async function POST(req: Request) {
     const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
     if (!isCron) {
-      const session = await getServerSession();
-      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const { authorized } = await requireAdmin();
+      if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
     }
 
     const effectiveTrigger = isCron ? "auto" : trigger;

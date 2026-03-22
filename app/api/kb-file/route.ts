@@ -1,9 +1,9 @@
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 
 export async function GET(req: Request) {
   try {
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get("fileId");
@@ -38,8 +38,8 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const body = await req.json();
     const { fileId, content } = body;

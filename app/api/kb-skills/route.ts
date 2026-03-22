@@ -1,10 +1,10 @@
-import { getServerSession } from "next-auth";
+import { requireAdmin } from "../require-admin";
 import { fetchAgentFiles } from "../kb-agents/route";
 
 export async function GET() {
   try {
-    const session = await getServerSession();
-    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const { authorized } = await requireAdmin();
+    if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const agents = await fetchAgentFiles();
     return Response.json({
