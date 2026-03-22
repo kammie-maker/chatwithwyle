@@ -633,7 +633,29 @@ export default function Home() {
 
       {/* Knowledge Base tab */}
       {activeTab === "kb" && (
-        <div className="flex-1 flex overflow-hidden" style={{ fontFamily: "var(--font-body)" }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ fontFamily: "var(--font-body)" }}>
+          {/* Top bar with shortcuts */}
+          <div className="shrink-0 flex items-center px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+            <button
+              onClick={() => {
+                const persona = kbFiles.find(f => f.name === "Wyle-Persona.md");
+                if (persona) openFile(persona);
+                else setToast("Wyle-Persona.md not found in source files");
+              }}
+              className="px-3 py-1.5 text-xs font-semibold transition-all"
+              style={{
+                borderRadius: "8px", background: "transparent",
+                border: "1px solid var(--color-bark)", color: "var(--color-bark)",
+                cursor: "pointer",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(102,57,37,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+            >
+              Edit Wyle Persona
+            </button>
+          </div>
+          {/* Panels */}
+          <div className="flex-1 flex overflow-hidden">
           {/* Panel 1: Source Files */}
           <div className="shrink-0 flex flex-col border-r" style={{ width: 260, borderColor: "rgba(22,22,22,0.06)" }}>
             <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
@@ -805,6 +827,7 @@ export default function Home() {
                 ))
               )}
             </div>
+          </div>
           </div>
         </div>
       )}
