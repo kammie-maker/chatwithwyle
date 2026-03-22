@@ -803,7 +803,7 @@ export default function Home() {
                           const isActive = c.id === activeConvId;
                           return (
                             <div key={c.id} className="group relative flex items-center px-1.5 mb-0.5">
-                              <button onClick={() => loadConversation(c.id)}
+                              <button onClick={() => { if (renamingId === c.id) return; loadConversation(c.id); }}
                                 className="flex-1 text-left px-2 py-2 transition-all" style={{
                                   borderRadius: 6, border: "none", cursor: "pointer",
                                   background: isActive ? "rgba(204,138,57,0.15)" : "transparent",
