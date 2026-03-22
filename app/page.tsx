@@ -12,6 +12,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
 interface KbFile { id: string; name: string; modifiedDate: string }
 interface LogEntry { timestamp: string; trigger: string }
+interface EditChatMsg { role: "user" | "assistant"; text: string }
 
 type Tab = "chat" | "kb";
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
@@ -110,6 +111,12 @@ export default function Home() {
   const [kbAddText, setKbAddText] = useState("");
   const [kbAdding, setKbAdding] = useState(false);
   const [kbAddConfirmRewrite, setKbAddConfirmRewrite] = useState(false);
+
+  // KB file edit chat state
+  const [editChatInput, setEditChatInput] = useState("");
+  const [editChatHistory, setEditChatHistory] = useState<EditChatMsg[]>([]);
+  const [editStreaming, setEditStreaming] = useState(false);
+  const editChatEndRef = useRef<HTMLDivElement>(null);
 
   // Check auth on mount
   useEffect(() => {
@@ -298,6 +305,8 @@ export default function Home() {
   async function openFile(file: KbFile) {
     setSelectedFile(file);
     setEditorLoading(true);
+    setEditChatHistory([]);
+    setEditChatInput("");
     try {
       const res = await fetch(`/api/kb-file?fileId=${encodeURIComponent(file.id)}`);
       const data = await res.json();
@@ -338,6 +347,47 @@ export default function Home() {
     setSelectedFile(null);
     setEditorContent("");
     setEditorOriginal("");
+    setEditChatHistory([]);
+    setEditChatInput("");
+  }
+
+  async function sendEditChat() {
+    if (!editChatInput.trim() || editStreaming || !selectedFile) return;
+    const instruction = editChatInput.trim();
+    setEditChatInput("");
+    const userMsg: EditChatMsg = { role: "user", text: instruction };
+    const newHistory = [...editChatHistory, userMsg].slice(-5);
+    setEditChatHistory(newHistory);
+    setEditStreaming(true);
+
+    try {
+      const res = await fetch("/api/kb-file-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: selectedFile.id,
+          fileName: selectedFile.name,
+          currentContent: editorContent,
+          instruction,
+        }),
+      });
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        setEditorContent(fullText);
+      }
+      setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Changes applied to editor. Review and Save when ready." }].slice(-5));
+    } catch {
+      setToast("Edit failed");
+      setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Failed to process edit request." }].slice(-5));
+    } finally {
+      setEditStreaming(false);
+    }
   }
 
   async function triggerRewrite() {
@@ -746,30 +796,8 @@ export default function Home() {
 
       {/* Knowledge Base tab */}
       {activeTab === "kb" && (
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ fontFamily: "var(--font-body)" }}>
-          {/* Top bar with shortcuts */}
-          <div className="shrink-0 flex items-center px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-            <button
-              onClick={() => {
-                const persona = kbFiles.find(f => f.name === "Wyle-Persona.md");
-                if (persona) openFile(persona);
-                else setToast("Wyle-Persona.md not found in source files");
-              }}
-              className="px-3 py-1.5 text-xs font-semibold transition-all"
-              style={{
-                borderRadius: "8px", background: "transparent",
-                border: "1px solid var(--color-bark)", color: "var(--color-bark)",
-                cursor: "pointer",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(102,57,37,0.08)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-            >
-              Edit Wyle Persona
-            </button>
-          </div>
-          {/* Panels */}
-          <div className="flex-1 flex overflow-hidden">
-          {/* Panel 1: Source Files */}
+        <div className="flex-1 flex overflow-hidden" style={{ fontFamily: "var(--font-body)" }}>
+          {/* Left panel: Source Files */}
           <div className="shrink-0 flex flex-col border-r" style={{ width: 260, borderColor: "rgba(22,22,22,0.06)" }}>
             <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
               <h2 className="text-sm font-semibold" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>Source Files</h2>
@@ -806,20 +834,20 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Panel 2: Editor + Add to KB */}
+          {/* Right panel: Editor + Chat to edit */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Editor area */}
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {!selectedFile ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm" style={{ color: "rgba(22,22,22,0.35)" }}>Select a file to edit</p>
-                </div>
-              ) : editorLoading ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
-                </div>
-              ) : (
-                <>
+            {!selectedFile ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm" style={{ color: "rgba(22,22,22,0.35)" }}>Select a file to edit</p>
+              </div>
+            ) : editorLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+              </div>
+            ) : (
+              <>
+                {/* Top: File content (60%) */}
+                <div className="flex flex-col" style={{ flex: "0 0 60%", minHeight: 0 }}>
                   <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
                     <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>{selectedFile.name}</h2>
                     <div className="flex gap-2 shrink-0">
@@ -860,87 +888,85 @@ export default function Home() {
                       color: "var(--color-onyx)",
                       background: "var(--color-cream)",
                       border: "none",
+                      overflow: "auto",
                     }}
                     spellCheck={false}
                   />
-                </>
-              )}
-            </div>
-
-            {/* Add to Knowledge Base section */}
-            <div className="shrink-0 border-t px-4 py-4" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-              <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>Add to Knowledge Base</h3>
-              <textarea
-                value={kbAddText}
-                onChange={e => setKbAddText(e.target.value)}
-                placeholder="Type new knowledge, corrections, or updates here..."
-                className="w-full p-3 text-sm resize-none focus:outline-none transition-all"
-                style={{
-                  borderRadius: "10px",
-                  background: "#ffffff",
-                  border: "1px solid rgba(22,22,22,0.1)",
-                  color: "var(--color-onyx)",
-                  fontFamily: "var(--font-body)",
-                  height: 80,
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"; e.currentTarget.style.boxShadow = "none"; }}
-              />
-              <div className="flex justify-end mt-2">
-                <button
-                  onClick={handleAddToKb}
-                  disabled={kbAdding || !kbAddText.trim()}
-                  className="px-4 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
-                  style={{
-                    borderRadius: "8px", background: "var(--color-mustard)",
-                    color: "var(--color-cream)", border: "none", cursor: "pointer",
-                  }}
-                >
-                  {kbAdding ? "Adding\u2026" : "Add to Knowledge Base"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Panel 3: Rewrite Log */}
-          <div className="shrink-0 flex flex-col border-l" style={{ width: 280, borderColor: "rgba(22,22,22,0.06)" }}>
-            <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>Rewrite Log</h2>
-              <button
-                onClick={() => setForceRewriteConfirm(true)}
-                disabled={rewriting}
-                className="px-2.5 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
-                style={{
-                  borderRadius: "6px", background: "var(--color-bark)",
-                  color: "var(--color-cream)", border: "none", cursor: "pointer",
-                }}
-              >
-                {rewriting ? "Rewriting\u2026" : "Force Rewrite Now"}
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {logLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
                 </div>
-              ) : logEntries.length === 0 ? (
-                <p className="text-xs px-4 py-4" style={{ color: "rgba(22,22,22,0.4)" }}>No rewrite history</p>
-              ) : (
-                logEntries.map((entry, i) => (
-                  <div key={i} className="px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.04)" }}>
-                    <div className="text-xs font-medium" style={{ color: "var(--color-onyx)" }}>
-                      {new Date(entry.timestamp).toLocaleString("en-US", {
-                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                      })}
-                    </div>
-                    <div className="text-xs mt-0.5" style={{ color: "rgba(22,22,22,0.45)" }}>
-                      Trigger: {entry.trigger}
+
+                {/* Divider */}
+                <div className="shrink-0" style={{ height: 1, background: "rgba(22,22,22,0.1)" }} />
+
+                {/* Bottom: Chat to edit (40%) */}
+                <div className="flex flex-col" style={{ flex: "0 0 40%", minHeight: 0, background: "#ffffff" }}>
+                  <div className="shrink-0 px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                    <h3 className="text-xs font-semibold" style={{ color: "rgba(22,22,22,0.45)" }}>Chat to edit</h3>
+                  </div>
+                  {/* Chat history */}
+                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {editChatHistory.length === 0 && !editStreaming && (
+                      <p className="text-xs text-center py-4" style={{ color: "rgba(22,22,22,0.3)" }}>
+                        Ask Claude to make changes to this file
+                      </p>
+                    )}
+                    {editChatHistory.map((msg, i) => (
+                      <div key={i} className={`mb-2 ${msg.role === "user" ? "flex justify-end" : ""}`}>
+                        {msg.role === "user" ? (
+                          <div className="inline-block max-w-[85%] px-3 py-1.5 text-xs" style={{
+                            background: "var(--color-mustard)", borderRadius: "10px 10px 2px 10px",
+                            color: "var(--color-cream)",
+                          }}>
+                            {msg.text}
+                          </div>
+                        ) : (
+                          <div className="text-xs" style={{ color: "rgba(22,22,22,0.55)" }}>
+                            {msg.text}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {editStreaming && (
+                      <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--color-mustard)" }}>
+                        <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+                        Editing file...
+                      </div>
+                    )}
+                    <div ref={editChatEndRef} />
+                  </div>
+                  {/* Chat input */}
+                  <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 px-3 py-2 text-xs focus:outline-none transition-all"
+                        style={{
+                          borderRadius: "8px", background: "var(--color-cream)",
+                          border: "1px solid rgba(22,22,22,0.08)",
+                          color: "var(--color-onyx)", fontFamily: "var(--font-body)",
+                        }}
+                        onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
+                        onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                        placeholder="Ask Claude to update this file..."
+                        value={editChatInput}
+                        onChange={e => setEditChatInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendEditChat(); } }}
+                        disabled={editStreaming}
+                      />
+                      <button
+                        onClick={sendEditChat}
+                        disabled={editStreaming || !editChatInput.trim()}
+                        className="px-3 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
+                        style={{
+                          borderRadius: "8px", background: "var(--color-mustard)",
+                          color: "var(--color-cream)", border: "none", cursor: "pointer",
+                        }}
+                      >
+                        Send
+                      </button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
