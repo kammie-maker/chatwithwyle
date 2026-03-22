@@ -55,6 +55,7 @@ const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EV
 - Never write greetings or openers of any kind
 - Never wrap talk track content in quotation marks. Write all client-facing scripts as direct speech without surrounding quotes. The formatting of the section makes it clear it is a script.
 - In the DEEPER section, do not use dashes or hyphens to create bullet points. Write each point as a standalone sentence on its own line with a blank line between each point.
+- Never ask the user if they want DEEPER, DEEPEST, INTERNAL, or any combination. Never write any sentence that prompts the user to request more sections. The [[EXPAND_PROMPT]] token is the only indicator that more sections are available. It is replaced by buttons in the UI. Never describe or reference those buttons in your response text.
 
 All other formatting and structural rules are defined by the active Skill file for the current chat mode. Follow the Skill file instructions exactly.`;
 
