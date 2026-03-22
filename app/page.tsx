@@ -401,6 +401,9 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const streamingConvRef = useRef<string | null>(null); // which conversation is currently streaming
+  const activeConvRef = useRef<string | null>(null); // tracks activeConvId for use in async callbacks
+  const [bgStreaming, setBgStreaming] = useState<Set<string>>(new Set()); // conversations streaming in background
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -468,6 +471,11 @@ export default function Home() {
   }
 
   async function loadConversation(id: string) {
+    // If navigating away from a streaming conversation, mark it as background
+    if (streamingConvRef.current && streamingConvRef.current !== id) {
+      setBgStreaming(prev => new Set(prev).add(streamingConvRef.current!));
+      setStreaming(false); // clear UI streaming state so new conversation isn't blocked
+    }
     try {
       const res = await fetch(`/api/conversations/${id}`);
       const data = await res.json();
@@ -537,6 +545,7 @@ export default function Home() {
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { activeConvRef.current = activeConvId; }, [activeConvId]);
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
   useEffect(() => {
     function handleClick(e: MouseEvent) { if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false); }
@@ -567,18 +576,54 @@ export default function Home() {
       } catch { /* continue without persistence */ }
     }
 
+    // Track which conversation this stream belongs to
+    const thisConvId = convId;
+    streamingConvRef.current = thisConvId;
+
     let userContent: string | ContentBlock[];
     if (pendingFiles.length > 0) { const blocks: ContentBlock[] = []; for (const f of pendingFiles) { if (f.fileType === "image") blocks.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.base64 } }); else if (f.fileType === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.base64 } }); else { const decoded = atob(f.base64); blocks.push({ type: "text", text: `--- ${f.name} ---\n${decoded}` }); } } if (text.trim()) blocks.push({ type: "text", text: text.trim() }); userContent = blocks; } else { userContent = text.trim(); }
     const userMsg: Message = { role: "user", content: userContent }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "", interactionMode }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
 
     // Save user message
     const userTextForDb = typeof userContent === "string" ? userContent : text.trim();
-    if (convId) saveMessage("user", userTextForDb);
+    if (thisConvId) saveMessage("user", userTextForDb);
 
-    try { const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]); } fullText = cleanResponse(fullText); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
-      // Save assistant response
-      if (convId) saveMessage("assistant", fullText);
-    } catch { setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]); } finally { setStreaming(false); }
+    try {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) });
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        // Only update UI if user is still viewing this conversation
+        if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+          setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
+        }
+      }
+      fullText = cleanResponse(fullText);
+      // Final update only if still viewing
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
+      }
+      // Always save to DB regardless of which conversation is displayed
+      if (thisConvId) saveMessage("assistant", fullText);
+    } catch {
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]);
+      }
+    } finally {
+      streamingConvRef.current = null;
+      // Only clear streaming state if user is still on this conversation
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setStreaming(false);
+      } else {
+        setStreaming(false);
+      }
+      setBgStreaming(prev => { const next = new Set(prev); next.delete(thisConvId || ""); return next; });
+    }
   }
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
@@ -823,6 +868,9 @@ export default function Home() {
                                     <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
                                     <span className="text-xs truncate" style={{ maxWidth: 160 }}>{c.title}</span>
                                     {c.pinned && <span style={{ fontSize: 9, color: "#CC8A39" }}>&#x1F4CC;</span>}
+                                    {(bgStreaming.has(c.id) || (streamingConvRef.current === c.id && streaming)) && (
+                                      <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "#CC8A39", flexShrink: 0 }} />
+                                    )}
                                   </div>
                                 )}
                               </button>
