@@ -14,19 +14,59 @@ interface KbFile { id: string; name: string; modifiedDate: string }
 interface LogEntry { timestamp: string; trigger: string }
 
 type Tab = "chat" | "kb";
+type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
 
-const STARTER_QUESTIONS = [
-  "How do I handle a pricing objection?",
-  "Walk me through the revenue guarantee",
-  "What\u2019s our onboarding process?",
-  "How do I respond to \u2018we already have a manager\u2019?",
-  "What makes us different from other revenue managers?",
-  "How do I explain RPM to a new lead?",
-  "What\u2019s the typical ROI for a new client?",
-  "How do I handle a client who wants to cancel?",
-  "What does our first 30 days look like?",
-  "How do I close someone who\u2019s on the fence?",
-];
+const MODE_LABELS: Record<ChatMode, string> = {
+  sales: "Sales Chat",
+  "client-success": "Client Success Chat",
+  fulfillment: "Fulfillment Chat",
+  onboarding: "Onboarding Chat",
+};
+
+const MODE_QUESTIONS: Record<ChatMode, string[]> = {
+  sales: [
+    "How do I handle a pricing objection?",
+    "Walk me through the revenue guarantee",
+    "How do I respond to \u2018we already have a manager\u2019?",
+    "What makes us different from other revenue managers?",
+    "How do I close someone who\u2019s on the fence?",
+    "What\u2019s the typical ROI for a new client?",
+    "Give me a discovery question opener",
+    "How do I handle \u2018I need to think about it\u2019?",
+    "What\u2019s our response to a lowball counter?",
+    "How do I reframe RPM value for a skeptic?",
+  ],
+  "client-success": [
+    "How do I explain a down month to a client?",
+    "What\u2019s our response to a client threatening to leave?",
+    "How do I present the monthly revenue report?",
+    "What do I say when a client asks why their competitor is outperforming them?",
+    "How do I handle a client who wants more control?",
+    "What\u2019s our escalation process for unhappy clients?",
+    "How do I reframe a bad month positively?",
+    "What metrics should I lead with in a client call?",
+  ],
+  fulfillment: [
+    "What\u2019s our process for a new listing setup?",
+    "How do we handle orphan nights?",
+    "What\u2019s our MNS strategy for peak season?",
+    "How do we approach OTA ranking optimization?",
+    "What\u2019s our pricing review cadence?",
+    "How do we handle a client who overrides our pricing?",
+    "What\u2019s the process for a revenue audit?",
+    "How do we calculate MPI for a new market?",
+  ],
+  onboarding: [
+    "What does our first 30 days look like?",
+    "What do I need from the client in week 1?",
+    "How do I set revenue expectations at kickoff?",
+    "What\u2019s our onboarding call agenda?",
+    "How do I explain our pricing methodology to a new client?",
+    "What access do we need from the client?",
+    "How do we handle a client who\u2019s impatient for results in month 1?",
+    "What\u2019s our communication cadence with new clients?",
+  ],
+};
 
 export default function Home() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -38,6 +78,9 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("chat");
 
   // Chat state
+  const [chatMode, setChatMode] = useState<ChatMode>("sales");
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -83,6 +126,27 @@ export default function Home() {
       loadLog();
     }
   }, [activeTab, authenticated]);
+
+  // Close mode dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
+        setModeDropdownOpen(false);
+      }
+    }
+    if (modeDropdownOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [modeDropdownOpen]);
+
+  function switchMode(mode: ChatMode) {
+    if (mode === chatMode) { setModeDropdownOpen(false); return; }
+    setChatMode(mode);
+    setMessages([]);
+    setInput("");
+    setPendingFiles([]);
+    setModeDropdownOpen(false);
+    setToast(`Switched to ${MODE_LABELS[mode]}`);
+  }
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -147,7 +211,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updated }),
+        body: JSON.stringify({ messages: updated, mode: chatMode }),
       });
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
@@ -422,6 +486,55 @@ export default function Home() {
       {/* Chat tab */}
       {activeTab === "chat" && (
         <>
+          {/* Mode selector */}
+          <div className="shrink-0 flex items-center px-4 pt-3 pb-1" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
+            <div className="relative" ref={modeDropdownRef}>
+              <button
+                onClick={() => setModeDropdownOpen(!modeDropdownOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all"
+                style={{
+                  borderRadius: "20px",
+                  background: "var(--color-olive)",
+                  color: "var(--color-cream)",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                }}
+              >
+                {MODE_LABELS[chatMode]}
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} className="w-3 h-3" style={{ transform: modeDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+              {modeDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1 py-1 shadow-lg" style={{
+                  borderRadius: "10px", background: "#ffffff",
+                  border: "1px solid rgba(22,22,22,0.08)",
+                  zIndex: 40, minWidth: 200,
+                }}>
+                  {(Object.keys(MODE_LABELS) as ChatMode[]).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => switchMode(mode)}
+                      className="w-full text-left px-4 py-2 text-sm transition-all"
+                      style={{
+                        background: mode === chatMode ? "rgba(60,59,34,0.08)" : "transparent",
+                        color: "var(--color-onyx)",
+                        fontFamily: "var(--font-body)",
+                        fontWeight: mode === chatMode ? 600 : 400,
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={e => { if (mode !== chatMode) e.currentTarget.style.background = "rgba(22,22,22,0.04)"; }}
+                      onMouseLeave={e => { if (mode !== chatMode) e.currentTarget.style.background = "transparent"; }}
+                    >
+                      {MODE_LABELS[mode]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
               <div className="text-center py-12">
@@ -436,7 +549,7 @@ export default function Home() {
                 </p>
                 {/* Starter questions */}
                 <div className="grid grid-cols-2 gap-2 text-left" style={{ maxWidth: 560, margin: "0 auto" }}>
-                  {STARTER_QUESTIONS.map((q, i) => (
+                  {MODE_QUESTIONS[chatMode].map((q, i) => (
                     <button
                       key={i}
                       onClick={() => sendMessage(q)}
