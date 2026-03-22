@@ -35,6 +35,8 @@ function doPost(e) {
         return handleGetFile(data);
       case "update_file":
         return handleUpdateFile(data);
+      case "create_file":
+        return handleCreateFile(data);
       default:
         return jsonResponse({ error: "Unknown action: " + action });
     }
@@ -171,5 +173,27 @@ function handleUpdateFile(data) {
     return jsonResponse({ success: true });
   } catch (err) {
     return jsonResponse({ error: "Update failed: " + err.message });
+  }
+}
+
+function handleCreateFile(data) {
+  if (!verifyPassword(data)) {
+    return jsonResponse({ error: "Unauthorized" });
+  }
+  var fileName = data.fileName;
+  var content = data.content || "";
+  if (!fileName) {
+    return jsonResponse({ error: "fileName is required" });
+  }
+  try {
+    var folder = DriveApp.getFolderById(KB_FOLDER_ID);
+    var existing = folder.getFilesByName(fileName);
+    if (existing.hasNext()) {
+      return jsonResponse({ error: "File already exists: " + fileName });
+    }
+    var file = folder.createFile(fileName, content, "text/markdown");
+    return jsonResponse({ success: true, fileId: file.getId(), name: fileName });
+  } catch (err) {
+    return jsonResponse({ error: "Create failed: " + err.message });
   }
 }
