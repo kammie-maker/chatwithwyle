@@ -222,30 +222,6 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Mode selector in header */}
-          {activeTab === "chat" && (
-            <div className="relative" ref={modeDropdownRef}>
-              <button onClick={() => setModeDropdownOpen(!modeDropdownOpen)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
-                style={{ borderRadius: "20px", background: "rgba(255,255,255,0.1)", color: "var(--color-cream)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                {MODE_LABELS[chatMode]}
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} className="w-3 h-3" style={{ transform: modeDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-              </button>
-              {modeDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 py-1 shadow-lg" style={{ borderRadius: "10px", background: "var(--color-onyx)", border: "1px solid rgba(255,255,255,0.12)", zIndex: 40, minWidth: 200 }}>
-                  {(Object.keys(MODE_LABELS) as ChatMode[]).map(mode => (
-                    <button key={mode} onClick={() => switchMode(mode)} className="w-full text-left px-4 py-2 text-sm transition-all"
-                      style={{ background: "transparent", color: mode === chatMode ? "var(--color-mustard)" : "var(--color-cream)", fontFamily: "var(--font-body)", fontWeight: mode === chatMode ? 600 : 400, border: "none", cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      {MODE_LABELS[mode]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           {activeTab === "chat" && messages.length > 0 && (
             <button onClick={clearConversation} className="text-xs font-medium px-3 py-1.5 transition-all"
               style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(237,233,225,0.5)", fontFamily: "var(--font-body)", cursor: "pointer" }}
@@ -334,6 +310,29 @@ export default function Home() {
                 </div>
               )}
               <div className="flex gap-2 items-end">
+                {/* Mode selector */}
+                <div className="relative shrink-0" ref={modeDropdownRef}>
+                  <button onClick={() => setModeDropdownOpen(!modeDropdownOpen)} className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium transition-all"
+                    style={{ borderRadius: "10px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer", minHeight: 44, whiteSpace: "nowrap" }}>
+                    <span className="hidden sm:inline">{MODE_LABELS[chatMode]}</span>
+                    <span className="sm:hidden">{MODE_LABELS[chatMode].split(" ")[0]}</span>
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} className="w-3 h-3 shrink-0" style={{ transform: modeDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                  {modeDropdownOpen && (
+                    <div className="absolute left-0 bottom-full mb-1 py-1 shadow-lg" style={{ borderRadius: "10px", background: "var(--color-onyx)", border: "1px solid rgba(255,255,255,0.12)", zIndex: 40, minWidth: 200 }}>
+                      {(Object.keys(MODE_LABELS) as ChatMode[]).map(mode => (
+                        <button key={mode} onClick={() => switchMode(mode)} className="w-full text-left px-4 py-2 text-sm transition-all"
+                          style={{ background: "transparent", color: mode === chatMode ? "var(--color-mustard)" : "var(--color-cream)", fontWeight: mode === chatMode ? 600 : 400, border: "none", cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          {MODE_LABELS[mode]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept={ACCEPTED_TYPES} multiple className="hidden" />
                 <button onClick={() => fileInputRef.current?.click()} disabled={streaming || pendingFiles.length >= 10} className="shrink-0 flex items-center justify-center disabled:opacity-40 transition-all"
                   style={{ width: 44, minHeight: 44, borderRadius: "12px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", cursor: "pointer", color: "var(--color-olive)" }}
