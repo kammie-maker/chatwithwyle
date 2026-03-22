@@ -6,7 +6,7 @@ type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
-interface Message { role: "user" | "assistant"; content: string | ContentBlock[] }
+interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode }
 interface PendingFile { name: string; base64: string; mediaType: string; preview: string | null; fileType: "image" | "pdf" | "text" }
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
@@ -16,6 +16,7 @@ interface EditChatMsg { role: "user" | "assistant"; text: string }
 
 type Tab = "chat" | "kb";
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
+type InteractionMode = "client" | "research";
 
 const MODE_LABELS: Record<ChatMode, string> = {
   sales: "Sales Chat",
@@ -131,13 +132,14 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded, expandLoading, onExpand, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
-  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode;
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, inlineExpanded, expandLoading, onExpand, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
+  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode;
   inlineExpanded: Record<string, string>; expandLoading: string | undefined;
-  onExpand: (section: string) => void; onDraft: (action: string) => void;
+  onExpand: (section: string) => void; onDraft: (action: string) => void; onCopyBrief: () => void;
   handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
+  const isResearch = msgInteractionMode === "research";
   const parsed = parseResponse(text);
   const showPills = !isStreaming && (parsed.hasStructure || parsed.hadExpandToken);
 
@@ -149,7 +151,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
 
   // Which sections are already expanded inline
   const expandedKeys = Object.keys(inlineExpanded);
-  const allExpandKeys = ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+  const allExpandKeys = isResearch ? ["DEEPER", "DEEPEST"] : ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
   const availablePills = allExpandKeys.filter(k => !expandedKeys.includes(k) && k !== expandLoading);
 
   return (
@@ -157,7 +159,10 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
       <div className="w-7 h-7 shrink-0 flex items-center justify-center mt-0.5" style={{ background: "var(--color-mustard)", borderRadius: "8px" }}>
         <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
       </div>
-      <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0 }}>
+      <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0, position: "relative" }}>
+        {isResearch && (
+          <div style={{ position: "absolute", top: 8, right: 8, background: "#3c3b22", color: "#f8f6ee", fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>INTERNAL</div>
+        )}
         <div className="px-4 py-3">
           {/* SIMPLE / base content */}
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
@@ -215,14 +220,23 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
           {/* Action buttons */}
           {showPills && !expandLoading && (
             <div className="flex flex-wrap mt-2" style={{ gap: 8 }}>
-              {MODE_ACTIONS[chatMode].map(action => (
-                <button key={action} onClick={() => onDraft(action)}
+              {isResearch ? (
+                <button onClick={onCopyBrief}
                   style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
                   onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
                   onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
-                  {action}
+                  Copy as Brief
                 </button>
-              ))}
+              ) : (
+                MODE_ACTIONS[chatMode].map(action => (
+                  <button key={action} onClick={() => onDraft(action)}
+                    style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
+                    {action}
+                  </button>
+                ))
+              )}
             </div>
           )}
 
@@ -257,6 +271,41 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
   );
 }
 
+const RESEARCH_QUESTIONS: Record<ChatMode, string[]> = {
+  sales: [
+    "What are the most common reasons deals stall?",
+    "What objections are hardest to handle and why?",
+    "What do our best closes have in common?",
+    "What should I know before calling a prospect cold?",
+    "What makes a prospect a bad fit for us?",
+    "What's our competitive positioning?",
+    "How do I know when a deal is truly dead?",
+    "What does our guarantee actually cover?",
+  ],
+  "client-success": [
+    "What are the most common reasons clients churn?",
+    "What does a healthy client relationship look like?",
+    "How do we handle an underperforming market?",
+    "What are early warning signs a client is unhappy?",
+    "How do we approach a difficult renewal conversation?",
+    "What results should a client expect in month 1?",
+  ],
+  fulfillment: [
+    "What are the most common pricing mistakes we see?",
+    "How do we approach a market we've never managed?",
+    "What does a full portfolio audit look like?",
+    "When should we push back on a client override?",
+    "What's our process for a new listing launch?",
+  ],
+  onboarding: [
+    "What do new clients most commonly misunderstand?",
+    "What sets up a client relationship for long-term success?",
+    "What should we accomplish in the first 30 days?",
+    "What are common onboarding mistakes to avoid?",
+    "How do we set revenue expectations without overpromising?",
+  ],
+};
+
 function renderDiff(raw: string): string {
   let html = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   html = html.replace(/\[\[DEL\]\]([\s\S]*?)\[\[\/DEL\]\]/g,
@@ -273,6 +322,7 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [chatMode, setChatMode] = useState<ChatMode>("sales");
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("client");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -333,8 +383,8 @@ export default function Home() {
     if (!text.trim() && pendingFiles.length === 0) return; if (streaming) return;
     let userContent: string | ContentBlock[];
     if (pendingFiles.length > 0) { const blocks: ContentBlock[] = []; for (const f of pendingFiles) { if (f.fileType === "image") blocks.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.base64 } }); else if (f.fileType === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.base64 } }); else { const decoded = atob(f.base64); blocks.push({ type: "text", text: `--- ${f.name} ---\n${decoded}` }); } } if (text.trim()) blocks.push({ type: "text", text: text.trim() }); userContent = blocks; } else { userContent = text.trim(); }
-    const userMsg: Message = { role: "user", content: userContent }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "" }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
-    try { const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setMessages([...updated, { role: "assistant", content: fullText }]); } } catch { setMessages([...updated, { role: "assistant", content: "Sorry, I\u2019m unable to respond right now. Please try again." }]); } finally { setStreaming(false); }
+    const userMsg: Message = { role: "user", content: userContent }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "", interactionMode }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
+    try { const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]); } } catch { setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]); } finally { setStreaming(false); }
   }
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
@@ -361,7 +411,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: contextMessages, mode: chatMode }),
+        body: JSON.stringify({ messages: contextMessages, mode: chatMode, interactionMode }),
       });
       if (!res.body) throw new Error("No response body");
 
@@ -517,7 +567,7 @@ export default function Home() {
                 <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
                 <p className="text-sm mb-8" style={{ color: "rgba(22,22,22,0.45)", maxWidth: 400, margin: "0 auto" }}>Ask me anything about Freewyld Foundry, revenue management, or the short-term rental industry.</p>
                 <div className="grid grid-cols-2 gap-2 text-left" style={{ maxWidth: 560, margin: "0 auto" }}>
-                  {MODE_QUESTIONS[chatMode].map((q, i) => (
+                  {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((q, i) => (
                     <button key={i} onClick={() => sendMessage(q)} disabled={streaming} className="px-3 py-2.5 text-xs text-left transition-all"
                       style={{ borderRadius: "10px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer", lineHeight: "1.4" }}
                       onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
@@ -540,9 +590,11 @@ export default function Home() {
                 <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
+                      msgInteractionMode={msg.interactionMode || "client"}
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]}
                       onExpand={(section) => expandSectionInline(i, section)}
                       onDraft={(action) => sendDraftAction(action, i)}
+                      onCopyBrief={() => { const ctx = handleDraftAction(i); if (ctx) { navigator.clipboard.writeText(ctx); setToast("Copied to clipboard"); } }}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
                     <div className="inline-block max-w-[80%] text-sm" style={{ background: "var(--color-bark)", borderRadius: "16px 16px 4px 16px", color: "var(--color-cream)", padding: hasMedia ? "0.5rem" : undefined }}>
@@ -560,6 +612,21 @@ export default function Home() {
           {/* Input area */}
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
             <div style={{ maxWidth: 720, margin: "0 auto" }}>
+              {/* Interaction mode toggle */}
+              <div className="flex items-center mb-2" style={{ gap: 2 }}>
+                <button onClick={() => setInteractionMode("client")}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: "6px 0 0 6px", border: "1px solid rgba(22,22,22,0.12)", cursor: "pointer", fontFamily: "var(--font-body)",
+                    background: interactionMode === "client" ? "#3c3b22" : "transparent",
+                    color: interactionMode === "client" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
+                  Client Interaction
+                </button>
+                <button onClick={() => setInteractionMode("research")}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: "0 6px 6px 0", border: "1px solid rgba(22,22,22,0.12)", borderLeft: "none", cursor: "pointer", fontFamily: "var(--font-body)",
+                    background: interactionMode === "research" ? "#3c3b22" : "transparent",
+                    color: interactionMode === "research" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
+                  Internal Research
+                </button>
+              </div>
               {pendingFiles.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-start gap-2">
                   {pendingFiles.map((f, idx) => (
