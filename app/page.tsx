@@ -333,7 +333,9 @@ function renderDiff(raw: string): string {
 }
 
 export default function Home() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
+  const userRole = (session?.user as Record<string, unknown> | undefined)?.role;
+  const isAdminUser = userRole === "admin";
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [chatMode, setChatMode] = useState<ChatMode>("sales");
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("client");
@@ -531,12 +533,16 @@ export default function Home() {
           <h1 className="text-base font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-cream)" }}>Wyle</h1>
           {/* Tabs */}
           <div className="flex gap-1 ml-6">
-            {(["chat", "kb"] as Tab[]).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className="px-3 py-1.5 text-xs font-medium transition-all"
-                style={{ borderRadius: "6px", background: activeTab === tab ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === tab ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                {tab === "chat" ? "Chat" : "Knowledge Base"}
+            <button onClick={() => setActiveTab("chat")} className="px-3 py-1.5 text-xs font-medium transition-all"
+              style={{ borderRadius: "6px", background: activeTab === "chat" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "chat" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
+              Chat
+            </button>
+            {isAdminUser && (
+              <button onClick={() => setActiveTab("kb")} className="px-3 py-1.5 text-xs font-medium transition-all"
+                style={{ borderRadius: "6px", background: activeTab === "kb" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "kb" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                Knowledge Base
               </button>
-            ))}
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -547,6 +553,12 @@ export default function Home() {
               onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "rgba(237,233,225,0.5)"; }}>
               Clear
             </button>
+          )}
+          {isAdminUser && (
+            <a href="/admin" className="text-xs font-medium px-3 py-1.5 transition-all"
+              style={{ borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(237,233,225,0.5)", textDecoration: "none", fontFamily: "var(--font-body)" }}>
+              Admin
+            </a>
           )}
           <button onClick={() => signOut()} className="text-xs font-medium px-3 py-1.5 transition-all"
             style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(237,233,225,0.35)", fontFamily: "var(--font-body)", cursor: "pointer" }}
