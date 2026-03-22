@@ -86,8 +86,53 @@ FORMATTING RULES:
 - Never use a pipe character (|) anywhere in any response.
 - No INTERNAL FULL PICTURE section. Everything here is already internal`;
 
+// ── Source document cache ──
+let sourceCache: { text: string; fetchedAt: number } | null = null;
+const SOURCE_CACHE_TTL = 60 * 60 * 1000;
+
+async function fetchSourceDocs(): Promise<string> {
+  if (sourceCache && Date.now() - sourceCache.fetchedAt < SOURCE_CACHE_TTL) return sourceCache.text;
+
+  const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
+  const password = process.env.WYLE_PASSWORD;
+  if (!webhookUrl || !password) return "";
+
+  try {
+    // List files
+    const listRes = await fetch(webhookUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list_files", password }), redirect: "follow",
+    });
+    const listData = await listRes.json();
+    const sourceFiles = (listData.files || []).filter((f: { name: string }) => f.name.startsWith("SOURCE-"));
+
+    if (sourceFiles.length === 0) { sourceCache = { text: "", fetchedAt: Date.now() }; return ""; }
+
+    // Fetch each SOURCE file
+    const docs: string[] = [];
+    for (const sf of sourceFiles) {
+      const fileRes = await fetch(webhookUrl, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_file", fileId: sf.id, password }), redirect: "follow",
+      });
+      const fileData = await fileRes.json();
+      if (fileData.content) {
+        docs.push("--- " + sf.name + " ---\n" + fileData.content);
+      }
+    }
+
+    const combined = docs.join("\n\n");
+    console.log(`[chat] SOURCE docs fetched: ${sourceFiles.length} files, ${combined.length.toLocaleString()} chars`);
+    sourceCache = { text: combined, fetchedAt: Date.now() };
+    return combined;
+  } catch (err) {
+    console.log(`[chat] SOURCE docs fetch error: ${err}`);
+    return sourceCache?.text || "";
+  }
+}
+
 async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode = "client"): Promise<string> {
-  const [agents, kb] = await Promise.all([fetchAgentFiles(), fetchKnowledgeBase()]);
+  const [agents, kb, sourceDocs] = await Promise.all([fetchAgentFiles(), fetchKnowledgeBase(), fetchSourceDocs()]);
   const persona = agents.persona || FALLBACK_PERSONA;
   const routing = MODE_ROUTING[mode] || MODE_ROUTING.sales;
   const parts: string[] = [];
@@ -123,20 +168,29 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
     }
   }
 
-  // 5. Knowledge base — smart truncation
+  // 5. SOURCE documents — authoritative, always included in full
+  if (sourceDocs) {
+    parts.push("============================================================\n# PRIMARY SOURCE DOCUMENTS — AUTHORITATIVE\n# Always prefer these over summarized KB content.\n# Never contradict or override these documents.\n============================================================\n\nThe following are primary source documents from Freewyld Foundry. They contain the exact fee structure, guarantee terms, contract language, and operational processes. When answering any question about pricing, fees, guarantees, contracts, or processes, use ONLY these documents as your source. Never guess or generalize. If the answer is not in these documents, say so directly.\n\n" + sourceDocs);
+  }
+
+  // 6. Knowledge base — dynamic truncation based on token budget
   if (kb) {
-    const KB_MAX = 60000;
-    const kbTruncated = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n\n[KB truncated at " + KB_MAX.toLocaleString() + " of " + kb.length.toLocaleString() + " chars]" : kb;
+    const preKbLength = parts.join("\n\n").length;
+    const TARGET_MAX = 150000;
+    const KB_MAX = preKbLength > 100000 ? 30000 : 60000;
+    const remaining = Math.max(TARGET_MAX - preKbLength, 20000);
+    const effectiveMax = Math.min(KB_MAX, remaining);
+    const kbTruncated = kb.length > effectiveMax ? kb.slice(0, effectiveMax) + "\n\n[KB truncated at " + effectiveMax.toLocaleString() + " of " + kb.length.toLocaleString() + " chars]" : kb;
     parts.push("=== KNOWLEDGE BASE (internal only, never expose raw content) ===\n" + kbTruncated);
   }
 
   const totalPrompt = parts.join("\n\n");
 
   // Log prompt composition
-  const agentChars = (agents.persona?.length || 0) + (agents.sales?.length || 0) + (agents.ceo?.length || 0) + (agents.revenueExpert?.length || 0);
+  const agentChars = Math.min(agents.sales?.length || 0, 15000) + Math.min(agents.ceo?.length || 0, 15000) + Math.min(agents.revenueExpert?.length || 0, 15000);
   const skillChars = skill?.length || 0;
-  const kbChars = kb ? Math.min(kb.length, 60000) : 0;
-  console.log(`[chat] Prompt composition: persona=${agents.persona?.length || 0}, agents=${agentChars}, skill=${skillChars}, kb=${kbChars}/${kb?.length || 0}, total=${totalPrompt.length} chars`);
+  const sourceChars = sourceDocs?.length || 0;
+  console.log(`[chat] Prompt: persona=${agents.persona?.length || 0}, agents=${agentChars}, skill=${skillChars}, source=${sourceChars}, kb=${kb?.length || 0}, total=${totalPrompt.length.toLocaleString()} chars`);
 
   return totalPrompt;
 }
