@@ -68,14 +68,36 @@ export default function AdminPage() {
   }
 
   async function updateUser(email: string, updates: Record<string, string>) {
+    // Optimistic update — apply immediately to local state
+    const prevUsers = [...users];
+    setUsers(prev => prev.map(u => {
+      if (u.email !== email) return u;
+      const updated = { ...u };
+      if (updates.firstName !== undefined) { updated.firstName = updates.firstName; updated.name = [updates.firstName, u.lastName || ""].join(" ").trim(); }
+      if (updates.lastName !== undefined) { updated.lastName = updates.lastName; updated.name = [u.firstName || "", updates.lastName].join(" ").trim(); }
+      if (updates.role) updated.role = updates.role as "admin" | "standard";
+      if (updates.defaultMode) updated.defaultMode = updates.defaultMode;
+      if (updates.defaultInteraction) updated.defaultInteraction = updates.defaultInteraction;
+      if (updates.action === "suspend") updated.status = "suspended";
+      if (updates.action === "unsuspend") updated.status = "active";
+      if (updates.action === "activate_pending") updated.status = "active";
+      return updated;
+    }));
+
     try {
       const res = await fetch("/api/admin/users", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...updates }) });
       const data = await res.json();
-      if (data.error) { setToast(data.error); return; }
-      const msg = updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : updates.firstName !== undefined || updates.lastName !== undefined ? "Name updated" : updates.defaultMode || updates.defaultInteraction ? "Preferences updated" : "User updated";
+      if (data.error) {
+        setUsers(prevUsers); // Revert on error
+        setToast("Failed to save — please try again");
+        return;
+      }
+      const msg = updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : updates.firstName !== undefined || updates.lastName !== undefined ? "Name updated" : updates.defaultMode || updates.defaultInteraction ? "Preferences updated" : "Saved";
       setToast(msg);
-      loadUsers();
-    } catch { setToast("Update failed"); }
+    } catch {
+      setUsers(prevUsers); // Revert on error
+      setToast("Failed to save — please try again");
+    }
   }
 
   async function deleteUser(email: string) {
