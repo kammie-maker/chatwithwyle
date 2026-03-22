@@ -19,6 +19,47 @@ type Tab = "chat" | "kb";
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
 type InteractionMode = "client" | "research";
 
+interface Conversation {
+  id: string;
+  title: string;
+  mode: string;
+  interaction_type: string;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+  message_count?: number;
+}
+
+const MODE_BADGES: Record<string, { bg: string; label: string }> = {
+  sales: { bg: "#663925", label: "S" },
+  "client-success": { bg: "#3c3b22", label: "CS" },
+  fulfillment: { bg: "rgba(204,138,57,0.6)", label: "F" },
+  onboarding: { bg: "rgba(102,57,37,0.6)", label: "O" },
+};
+
+function groupByDate(convs: Conversation[]): { label: string; items: Conversation[] }[] {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const week = new Date(today.getTime() - 7 * 86400000);
+  const month = new Date(today.getTime() - 30 * 86400000);
+  const pinned = convs.filter(c => c.pinned);
+  const unpinned = convs.filter(c => !c.pinned);
+  const groups: { label: string; items: Conversation[] }[] = [];
+  if (pinned.length) groups.push({ label: "Pinned", items: pinned });
+  const buckets: [string, Conversation[]][] = [["Today", []], ["Yesterday", []], ["Last 7 days", []], ["Last 30 days", []], ["Older", []]];
+  for (const c of unpinned) {
+    const d = new Date(c.updated_at);
+    if (d >= today) buckets[0][1].push(c);
+    else if (d >= yesterday) buckets[1][1].push(c);
+    else if (d >= week) buckets[2][1].push(c);
+    else if (d >= month) buckets[3][1].push(c);
+    else buckets[4][1].push(c);
+  }
+  for (const [label, items] of buckets) { if (items.length) groups.push({ label, items }); }
+  return groups;
+}
+
 const MODE_LABELS: Record<ChatMode, string> = {
   sales: "Sales Chat",
   "client-success": "Client Success Chat",
@@ -341,6 +382,18 @@ export default function Home() {
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role;
   const isAdminUser = userRole === "admin";
   const [activeTab, setActiveTab] = useState<Tab>("chat");
+  // Conversation state
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Conversation[] | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [confirmDeleteConv, setConfirmDeleteConv] = useState<string | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [chatMode, setChatMode] = useState<ChatMode>("sales");
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("client");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -382,11 +435,107 @@ export default function Home() {
 
   // Load user preferences on mount
   useEffect(() => {
-    fetch("/api/user/preferences").then(r => r.json()).then(data => {
-      if (data.defaultMode && ["sales", "client-success", "fulfillment", "onboarding"].includes(data.defaultMode)) setChatMode(data.defaultMode);
-      if (data.defaultInteraction && ["client", "research"].includes(data.defaultInteraction)) setInteractionMode(data.defaultInteraction);
+    fetch("/api/user-preferences").then(r => r.json()).then(data => {
+      if (data.default_mode && ["sales", "client-success", "fulfillment", "onboarding"].includes(data.default_mode)) setChatMode(data.default_mode as ChatMode);
+      if (data.default_interaction && ["client", "research"].includes(data.default_interaction)) setInteractionMode(data.default_interaction as InteractionMode);
     }).catch(() => {});
+    // Load conversations
+    loadConversations();
   }, []);
+
+  async function loadConversations() {
+    try {
+      const res = await fetch("/api/conversations");
+      const data = await res.json();
+      setConversations(data.conversations || []);
+    } catch { /* ignore */ }
+  }
+
+  async function createNewChat() {
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: chatMode, interaction_type: interactionMode }),
+      });
+      const data = await res.json();
+      setActiveConvId(data.conversation.id);
+      setMessages([]);
+      setInlineExpanded({});
+      setExpandLoading({});
+      setExpandingAll({});
+      loadConversations();
+    } catch { /* ignore */ }
+  }
+
+  async function loadConversation(id: string) {
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      const data = await res.json();
+      if (data.conversation) {
+        setActiveConvId(id);
+        const mode = data.conversation.mode as ChatMode;
+        const iType = data.conversation.interaction_type as InteractionMode;
+        if (["sales", "client-success", "fulfillment", "onboarding"].includes(mode)) setChatMode(mode);
+        if (["client", "research"].includes(iType)) setInteractionMode(iType);
+        const msgs: Message[] = (data.messages || []).map((m: { role: string; content: string; interaction_mode?: string }) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          interactionMode: (m.interaction_mode || "client") as InteractionMode,
+        }));
+        setMessages(msgs);
+        setInlineExpanded({});
+        setExpandLoading({});
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function saveMessage(role: string, content: string) {
+    if (!activeConvId) return;
+    try {
+      await fetch(`/api/conversations/${activeConvId}/messages`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, content, interaction_mode: interactionMode }),
+      });
+      loadConversations(); // refresh titles and timestamps
+    } catch { /* ignore */ }
+  }
+
+  async function pinConversation(id: string, pinned: boolean) {
+    await fetch(`/api/conversations/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned }) });
+    loadConversations();
+  }
+
+  async function renameConversation(id: string, title: string) {
+    await fetch(`/api/conversations/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) });
+    setRenamingId(null);
+    loadConversations();
+  }
+
+  async function deleteConversation(id: string) {
+    await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    if (activeConvId === id) { setActiveConvId(null); setMessages([]); }
+    setConfirmDeleteConv(null);
+    loadConversations();
+  }
+
+  async function clearAllConversations() {
+    await fetch("/api/conversations/clear-all", { method: "DELETE" });
+    setActiveConvId(null); setMessages([]); setConversations([]); setConfirmClearAll(false);
+  }
+
+  // Search with debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults(null); return; }
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/conversations/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        setSearchResults(data.results || []);
+      } catch { setSearchResults([]); }
+    }, 500);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
   useEffect(() => {
@@ -406,10 +555,30 @@ export default function Home() {
 
   async function sendMessage(text: string) {
     if (!text.trim() && pendingFiles.length === 0) return; if (streaming) return;
+
+    // Auto-create conversation if none active
+    let convId = activeConvId;
+    if (!convId) {
+      try {
+        const createRes = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: chatMode, interaction_type: interactionMode }) });
+        const createData = await createRes.json();
+        convId = createData.conversation.id;
+        setActiveConvId(convId);
+      } catch { /* continue without persistence */ }
+    }
+
     let userContent: string | ContentBlock[];
     if (pendingFiles.length > 0) { const blocks: ContentBlock[] = []; for (const f of pendingFiles) { if (f.fileType === "image") blocks.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.base64 } }); else if (f.fileType === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.base64 } }); else { const decoded = atob(f.base64); blocks.push({ type: "text", text: `--- ${f.name} ---\n${decoded}` }); } } if (text.trim()) blocks.push({ type: "text", text: text.trim() }); userContent = blocks; } else { userContent = text.trim(); }
     const userMsg: Message = { role: "user", content: userContent }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "", interactionMode }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
-    try { const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]); } fullText = cleanResponse(fullText); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]); } catch { setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]); } finally { setStreaming(false); }
+
+    // Save user message
+    const userTextForDb = typeof userContent === "string" ? userContent : text.trim();
+    if (convId) saveMessage("user", userTextForDb);
+
+    try { const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]); } fullText = cleanResponse(fullText); setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
+      // Save assistant response
+      if (convId) saveMessage("assistant", fullText);
+    } catch { setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]); } finally { setStreaming(false); }
   }
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
@@ -581,7 +750,110 @@ export default function Home() {
 
       {/* ── Chat tab ── */}
       {activeTab === "chat" && (
-        <>
+        <div className="flex-1 flex overflow-hidden">
+          {/* Chat sidebar */}
+          <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+            {/* Sidebar header */}
+            <div className="shrink-0 flex items-center justify-between px-3 py-3">
+              {chatSidebarOpen && (
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 24, height: 24, flexShrink: 0 }}>
+                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+                </svg>
+              )}
+              <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4, marginLeft: chatSidebarOpen ? 0 : "auto", marginRight: chatSidebarOpen ? 0 : "auto" }}>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: chatSidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
+            </div>
+            {chatSidebarOpen && (
+              <>
+                {/* New chat button */}
+                <div className="px-3 mb-2">
+                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); }} className="w-full py-2 text-xs font-semibold"
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer" }}>
+                    + New Chat
+                  </button>
+                </div>
+                {/* Search */}
+                <div className="px-3 mb-2">
+                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..."
+                    className="w-full px-3 py-1.5 text-xs focus:outline-none"
+                    style={{ borderRadius: 6, background: "rgba(255,255,255,0.07)", border: "none", color: "rgba(248,246,238,0.85)" }} />
+                </div>
+                {/* Conversation list */}
+                <div className="flex-1 overflow-y-auto px-1.5">
+                  {searchResults !== null ? (
+                    searchResults.length === 0 ? <div className="text-xs text-center py-4" style={{ color: "rgba(248,246,238,0.3)" }}>No results</div> : (
+                      searchResults.map(c => (
+                        <button key={c.id} onClick={() => { loadConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
+                          className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <div className="text-xs truncate">{c.title}</div>
+                        </button>
+                      ))
+                    )
+                  ) : (
+                    groupByDate(conversations).map(group => (
+                      <div key={group.label} className="mb-2">
+                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "rgba(248,246,238,0.3)" }}>{group.label}</div>
+                        {group.items.map(c => {
+                          const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
+                          const isActive = c.id === activeConvId;
+                          return (
+                            <div key={c.id} className="group relative flex items-center px-1.5 mb-0.5">
+                              <button onClick={() => loadConversation(c.id)}
+                                className="flex-1 text-left px-2 py-2 transition-all" style={{
+                                  borderRadius: 6, border: "none", cursor: "pointer",
+                                  background: isActive ? "rgba(204,138,57,0.15)" : "transparent",
+                                  borderLeft: isActive ? "2px solid #CC8A39" : "2px solid transparent",
+                                  color: "rgba(248,246,238,0.85)",
+                                }}
+                                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
+                                {renamingId === c.id ? (
+                                  <input autoFocus value={renameText} onChange={e => setRenameText(e.target.value)}
+                                    onClick={e => e.stopPropagation()}
+                                    onBlur={() => { if (renameText.trim()) renameConversation(c.id, renameText.trim()); else setRenamingId(null); }}
+                                    onKeyDown={e => { if (e.key === "Enter" && renameText.trim()) renameConversation(c.id, renameText.trim()); if (e.key === "Escape") setRenamingId(null); }}
+                                    className="w-full text-xs bg-transparent focus:outline-none" style={{ color: "rgba(248,246,238,0.85)", borderBottom: "1px solid #CC8A39" }} />
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
+                                    <span className="text-xs truncate" style={{ maxWidth: 160 }}>{c.title}</span>
+                                    {c.pinned && <span style={{ fontSize: 9, color: "#CC8A39" }}>&#x1F4CC;</span>}
+                                  </div>
+                                )}
+                              </button>
+                              {/* Hover actions */}
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-0.5" style={{ background: "#161616" }}>
+                                <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameText(c.title); }} title="Rename"
+                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#9998;</button>
+                                <button onClick={(e) => { e.stopPropagation(); pinConversation(c.id, !c.pinned); }} title={c.pinned ? "Unpin" : "Pin"}
+                                  style={{ background: "none", border: "none", color: c.pinned ? "#CC8A39" : "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#x1F4CC;</button>
+                                <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteConv(c.id); }} title="Delete"
+                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#x1F5D1;</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Clear all */}
+                <div className="shrink-0 px-3 py-2 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <button onClick={() => setConfirmClearAll(true)} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer" }}>
+                    Clear all history
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Chat content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
           {/* Interaction mode toggle — fixed at top center */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
             <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
@@ -714,7 +986,36 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </>
+          </div>
+        </div>
+      )}
+
+      {/* Delete conversation confirm */}
+      {confirmDeleteConv && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+          <div style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>Delete conversation?</h3>
+            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This cannot be undone.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDeleteConv(null)} style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => deleteConversation(confirmDeleteConv)} style={{ borderRadius: 8, background: "#b91c1c", color: "white", border: "none", padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear all confirm */}
+      {confirmClearAll && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+          <div style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>Delete all conversations?</h3>
+            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This cannot be undone.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmClearAll(false)} style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={clearAllConversations} style={{ borderRadius: 8, background: "#b91c1c", color: "white", border: "none", padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete All</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Knowledge Base tab ── */}
