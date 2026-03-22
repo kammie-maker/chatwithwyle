@@ -703,19 +703,86 @@ export default function Home() {
     setExpandingAll(prev => { const copy = { ...prev }; delete copy[msgIdx]; return copy; });
   }
 
-  function handleDraftAction(msgIdx: number) {
-    // Build context from all visible sections for this message
+  function getCleanContext(msgIdx: number): string {
     const msg = messages[msgIdx];
-    if (!msg) return;
-    const baseText = typeof msg.content === "string" ? msg.content : "";
+    if (!msg) return "";
+    let baseText = typeof msg.content === "string" ? msg.content : "";
     const expanded = inlineExpanded[msgIdx] || {};
     const allContent = [baseText, ...Object.values(expanded)].join("\n\n");
-    return allContent;
+    // Strip all tokens and section headers
+    return allContent
+      .replace(/\[\[EXPAND_PROMPT\]\]/g, "")
+      .replace(/\[\[CLARIFY\]\][\s\S]*/g, "")
+      .replace(/^#{2,4}\s+(SIMPLE|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "")
+      .replace(/^---+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   function sendDraftAction(action: string, msgIdx: number) {
-    const context = handleDraftAction(msgIdx);
-    sendMessage(`Draft a ${action.toLowerCase()} based on this response:\n\n${context}`);
+    const context = getCleanContext(msgIdx);
+    let prompt = "";
+
+    if (action === "Draft Email") {
+      prompt = `Write a professional sales follow-up email based on this talk track. Format it exactly like this:
+
+Subject: [subject line]
+
+[email body. 3 to 5 short paragraphs, no bullets, no headers, written as a real email from a Freewyld sales rep to a prospect]
+
+Rules:
+- No em dashes
+- No colons in body text
+- No bold text
+- No bullet points
+- Conversational but professional tone
+- End with a clear single CTA
+- No sign-off. Just the CTA as the final line
+
+Talk track to base this on:
+${context}`;
+    } else if (action === "Draft Text") {
+      prompt = `Write a conversational SMS text message based on this talk track. Format as a real text message:
+
+Rules:
+- Short, 2-4 sentences max
+- Casual but professional
+- No greeting beyond first name
+- No sign-off
+- End with a leading question or soft CTA
+- No em dashes, no colons, no bold
+
+Talk track to base this on:
+${context}`;
+    } else if (action === "Draft Voicemail") {
+      prompt = `Write a voicemail script based on this talk track. Format as spoken word with [pause] markers:
+
+Rules:
+- Under 30 seconds when read aloud
+- Natural spoken cadence with [pause] markers between thoughts
+- Start with "Hey [name]" then get to the point
+- End with a callback ask
+- No em dashes, no colons, no bold
+
+Talk track to base this on:
+${context}`;
+    } else if (action === "Draft Slack Message") {
+      prompt = `Write a Slack message based on this talk track. Format as a real Slack message:
+
+Rules:
+- Conversational, warm but firm
+- No greeting beyond first name
+- No sign-off
+- 2-4 short paragraphs
+- No em dashes, no colons, no bold
+
+Talk track to base this on:
+${context}`;
+    } else {
+      prompt = `Draft a ${action.toLowerCase()} based on this:\n\n${context}`;
+    }
+
+    sendMessage(prompt);
   }
 
   function handleClarifyOption(option: string) {
@@ -957,7 +1024,7 @@ export default function Home() {
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
-                      onCopyBrief={() => { const ctx = handleDraftAction(i); if (ctx) { navigator.clipboard.writeText(ctx); setToast("Copied to clipboard"); } }}
+                      onCopyBrief={() => { const ctx = getCleanContext(i); if (ctx) { navigator.clipboard.writeText(ctx); setToast("Copied to clipboard"); } }}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
                     <div className="inline-block max-w-[80%] text-sm" style={{ background: "var(--color-bark)", borderRadius: "16px 16px 4px 16px", color: "var(--color-cream)", padding: hasMedia ? "0.5rem" : undefined }}>
