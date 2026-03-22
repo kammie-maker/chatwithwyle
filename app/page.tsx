@@ -184,29 +184,29 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
             );
           })}
 
-          {/* Expand pills */}
+          {/* Expand links */}
           {showPills && availablePills.length > 0 && !expandLoading && (
-            <div className="flex flex-wrap gap-2 mt-3">
+            <div className="flex flex-wrap mt-3" style={{ gap: 16 }}>
               {availablePills.map(k => (
                 <button key={k} onClick={() => onExpand(k)}
-                  style={{ borderRadius: 20, background: "transparent", border: "1px solid #3c3b22", color: "#3c3b22", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  + {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                  style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
+                  onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+                  onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
+                  + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Loading pill indicator */}
+          {/* Loading indicator */}
           {expandLoading && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              <span style={{ borderRadius: 20, background: "rgba(60,59,34,0.08)", border: "1px solid #3c3b22", color: "rgba(60,59,34,0.4)", padding: "4px 14px", fontSize: 13 }}>
-                + {expandLoading === "INTERNAL FULL PICTURE" ? "INTERNAL" : expandLoading}...
+            <div className="flex flex-wrap mt-3" style={{ gap: 16 }}>
+              <span style={{ fontSize: 13, color: "rgba(60,59,34,0.4)", fontFamily: "var(--font-body)" }}>
+                + {expandLoading === "INTERNAL FULL PICTURE" ? "Internal" : expandLoading.charAt(0) + expandLoading.slice(1).toLowerCase()}...
               </span>
               {availablePills.filter(k => k !== expandLoading).map(k => (
-                <span key={k} style={{ borderRadius: 20, background: "transparent", border: "1px solid rgba(60,59,34,0.3)", color: "rgba(60,59,34,0.3)", padding: "4px 14px", fontSize: 13 }}>
-                  + {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                <span key={k} style={{ fontSize: 13, color: "rgba(60,59,34,0.3)", fontFamily: "var(--font-body)" }}>
+                  + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </span>
               ))}
             </div>
@@ -214,12 +214,12 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded,
 
           {/* Action buttons */}
           {showPills && !expandLoading && (
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="flex flex-wrap mt-2" style={{ gap: 8 }}>
               {MODE_ACTIONS[chatMode].map(action => (
                 <button key={action} onClick={() => onDraft(action)}
-                  style={{ borderRadius: 20, background: "transparent", border: "1px solid #663925", color: "#663925", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
                   {action}
                 </button>
               ))}
