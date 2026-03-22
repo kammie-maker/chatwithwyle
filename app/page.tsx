@@ -380,7 +380,7 @@ export default function Home() {
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
   function cleanResponse(text: string): string {
-    return text.replace(/\u2014/g, " ").replace(/\u2013/g, " ");
+    return text.replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ");
   }
 
   async function sendMessage(text: string) {

@@ -53,6 +53,7 @@ const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EV
 - Never use bold text inside paragraphs
 - Assume every query is mid-conversation
 - Never write greetings or openers of any kind
+- Never wrap talk track content in quotation marks. Write all client-facing scripts as direct speech without surrounding quotes. The formatting of the section makes it clear it is a script.
 
 All other formatting and structural rules are defined by the active Skill file for the current chat mode. Follow the Skill file instructions exactly.`;
 
