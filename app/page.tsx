@@ -132,10 +132,10 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, inlineExpanded, expandLoading, onExpand, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
   text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode;
-  inlineExpanded: Record<string, string>; expandLoading: string | undefined;
-  onExpand: (section: string) => void; onDraft: (action: string) => void; onCopyBrief: () => void;
+  inlineExpanded: Record<string, string>; expandLoading: string | undefined; expandingAll: boolean;
+  onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void; onCopyBrief: () => void;
   handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
@@ -190,8 +190,8 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           })}
 
           {/* Expand links */}
-          {showPills && availablePills.length > 0 && !expandLoading && (
-            <div className="flex flex-wrap mt-3" style={{ gap: 16 }}>
+          {showPills && availablePills.length > 0 && !expandLoading && !expandingAll && (
+            <div className="flex flex-wrap items-center mt-3" style={{ gap: 16 }}>
               {availablePills.map(k => (
                 <button key={k} onClick={() => onExpand(k)}
                   style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
@@ -200,20 +200,36 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </button>
               ))}
+              {availablePills.length > 1 && (
+                <>
+                  <span style={{ color: "rgba(60,59,34,0.3)", fontSize: 13 }}>&middot;</span>
+                  <button onClick={onExpandAll}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600, textDecoration: "none" }}
+                    onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+                    onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
+                    Expand All
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* Loading indicator */}
-          {expandLoading && (
-            <div className="flex flex-wrap mt-3" style={{ gap: 16 }}>
-              <span style={{ fontSize: 13, color: "rgba(60,59,34,0.4)", fontFamily: "var(--font-body)" }}>
-                + {expandLoading === "INTERNAL FULL PICTURE" ? "Internal" : expandLoading.charAt(0) + expandLoading.slice(1).toLowerCase()}...
-              </span>
+          {(expandLoading || expandingAll) && (
+            <div className="flex flex-wrap items-center mt-3" style={{ gap: 16 }}>
+              {expandLoading && (
+                <span style={{ fontSize: 13, color: "rgba(60,59,34,0.4)", fontFamily: "var(--font-body)" }}>
+                  + {expandLoading === "INTERNAL FULL PICTURE" ? "Internal" : expandLoading.charAt(0) + expandLoading.slice(1).toLowerCase()}...
+                </span>
+              )}
               {availablePills.filter(k => k !== expandLoading).map(k => (
                 <span key={k} style={{ fontSize: 13, color: "rgba(60,59,34,0.3)", fontFamily: "var(--font-body)" }}>
                   + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </span>
               ))}
+              {expandingAll && !expandLoading && (
+                <span style={{ fontSize: 13, color: "rgba(60,59,34,0.4)", fontFamily: "var(--font-body)" }}>Expanding all...</span>
+              )}
             </div>
           )}
 
@@ -335,6 +351,7 @@ export default function Home() {
   // Per-message inline expanded sections: msgIndex -> { sectionKey: content }
   const [inlineExpanded, setInlineExpanded] = useState<Record<number, Record<string, string>>>({});
   const [expandLoading, setExpandLoading] = useState<Record<number, string>>({}); // msgIndex -> currently loading section key
+  const [expandingAll, setExpandingAll] = useState<Record<number, boolean>>({}); // msgIndex -> expanding all in progress
   const [clarifyInput, setClarifyInput] = useState("");
   const [kbFiles, setKbFiles] = useState<KbFile[]>([]);
   const [kbFilesLoading, setKbFilesLoading] = useState(false);
@@ -393,7 +410,7 @@ export default function Home() {
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
   function removePendingFile(index: number) { setPendingFiles(prev => prev.filter((_, i) => i !== index)); }
-  function clearConversation() { setMessages([]); setInlineExpanded({}); setExpandLoading({}); }
+  function clearConversation() { setMessages([]); setInlineExpanded({}); setExpandLoading({}); setExpandingAll({}); }
 
   async function expandSectionInline(msgIdx: number, sectionKey: string) {
     if (expandLoading[msgIdx]) return; // already loading something for this msg
@@ -452,6 +469,20 @@ export default function Home() {
     } finally {
       setExpandLoading(prev => { const copy = { ...prev }; delete copy[msgIdx]; return copy; });
     }
+  }
+
+  async function expandAllInline(msgIdx: number) {
+    const isResearch = interactionMode === "research";
+    const allKeys = isResearch ? ["DEEPER", "DEEPEST"] : ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+    const existing = inlineExpanded[msgIdx] || {};
+    const remaining = allKeys.filter(k => !existing[k]);
+    if (remaining.length === 0) return;
+
+    setExpandingAll(prev => ({ ...prev, [msgIdx]: true }));
+    for (const key of remaining) {
+      await expandSectionInline(msgIdx, key);
+    }
+    setExpandingAll(prev => { const copy = { ...prev }; delete copy[msgIdx]; return copy; });
   }
 
   function handleDraftAction(msgIdx: number) {
@@ -612,8 +643,8 @@ export default function Home() {
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
                       msgInteractionMode={msg.interactionMode || "client"}
-                      inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]}
-                      onExpand={(section) => expandSectionInline(i, section)}
+                      inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
+                      onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
                       onCopyBrief={() => { const ctx = handleDraftAction(i); if (ctx) { navigator.clipboard.writeText(ctx); setToast("Copied to clipboard"); } }}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
