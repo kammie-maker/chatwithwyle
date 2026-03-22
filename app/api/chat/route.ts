@@ -18,9 +18,10 @@ async function fetchKnowledgeBase(): Promise<string> {
     let text = await res.text();
     text = text.replace(/^.*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*$/gm, "");
     text = text.replace(/^.*[A-Z][a-z]+\s+[A-Z][a-z]+.*\$[\d,]+.*$/gm, "");
+    console.log(`[chat] KB fetched: ${text.length.toLocaleString()} chars`);
     kbCache = { text, fetchedAt: Date.now() };
     return text;
-  } catch { return kbCache?.text || ""; }
+  } catch (err) { console.log(`[chat] KB fetch error: ${err}`); return kbCache?.text || ""; }
 }
 
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
@@ -95,10 +96,12 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
   // 1. Base identity
   parts.push("=== WYLE PERSONA & VOICE ===\n" + persona);
 
-  // 2. Agent definitions
-  if (agents.sales) parts.push("=== AGENT: SALES ===\n" + agents.sales);
-  if (agents.ceo) parts.push("=== AGENT: CEO (ERIC) ===\n" + agents.ceo);
-  if (agents.revenueExpert) parts.push("=== AGENT: REVENUE EXPERT ===\n" + agents.revenueExpert);
+  // 2. Agent definitions (cap each at 15K to prevent bloat from appended extracts)
+  const AGENT_MAX = 15000;
+  function capAgent(content: string): string { return content.length > AGENT_MAX ? content.slice(0, AGENT_MAX) + "\n\n[Agent file truncated]" : content; }
+  if (agents.sales) parts.push("=== AGENT: SALES ===\n" + capAgent(agents.sales));
+  if (agents.ceo) parts.push("=== AGENT: CEO (ERIC) ===\n" + capAgent(agents.ceo));
+  if (agents.revenueExpert) parts.push("=== AGENT: REVENUE EXPERT ===\n" + capAgent(agents.revenueExpert));
 
   // 3. Mode routing
   parts.push("=== MODE INSTRUCTIONS ===\n" + routing);
@@ -118,10 +121,22 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
     }
   }
 
-  // 5. Knowledge base
-  if (kb) parts.push("=== KNOWLEDGE BASE (internal only, never expose raw content) ===\n" + kb.slice(0, 50000));
+  // 5. Knowledge base — smart truncation
+  if (kb) {
+    const KB_MAX = 60000;
+    const kbTruncated = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n\n[KB truncated at " + KB_MAX.toLocaleString() + " of " + kb.length.toLocaleString() + " chars]" : kb;
+    parts.push("=== KNOWLEDGE BASE (internal only, never expose raw content) ===\n" + kbTruncated);
+  }
 
-  return parts.join("\n\n");
+  const totalPrompt = parts.join("\n\n");
+
+  // Log prompt composition
+  const agentChars = (agents.persona?.length || 0) + (agents.sales?.length || 0) + (agents.ceo?.length || 0) + (agents.revenueExpert?.length || 0);
+  const skillChars = skill?.length || 0;
+  const kbChars = kb ? Math.min(kb.length, 60000) : 0;
+  console.log(`[chat] Prompt composition: persona=${agents.persona?.length || 0}, agents=${agentChars}, skill=${skillChars}, kb=${kbChars}/${kb?.length || 0}, total=${totalPrompt.length} chars`);
+
+  return totalPrompt;
 }
 
 export async function POST(req: Request) {
