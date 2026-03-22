@@ -7,7 +7,7 @@ type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
-interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode }
+interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode; draftLabel?: string }
 interface PendingFile { name: string; base64: string; mediaType: string; preview: string | null; fileType: "image" | "pdf" | "text" }
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
@@ -174,16 +174,17 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
-  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode;
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
+  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode; draftLabel?: string;
   inlineExpanded: Record<string, string>; expandLoading: string | undefined; expandingAll: boolean;
   onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void; onCopyBrief: () => void;
   handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
   const isResearch = msgInteractionMode === "research";
+  const isDraft = !!draftLabel;
   const parsed = parseResponse(text);
-  const showPills = !isStreaming && (parsed.hasStructure || parsed.hadExpandToken);
+  const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
 
   // Clean content: strip "---" horizontal rules
   function clean(s: string) { return s.replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim(); }
@@ -210,6 +211,8 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           <div style={{ position: "absolute", top: 8, right: 8, background: "#3c3b22", color: "#f8f6ee", fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>INTERNAL</div>
         )}
         <div className="px-4 py-3">
+          {/* Draft label */}
+          {isDraft && <div className="mb-2"><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "rgba(22,22,22,0.45)", fontWeight: 600 }}>{draftLabel}</span></div>}
           {/* SIMPLE / base content */}
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
           {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
@@ -782,7 +785,43 @@ ${context}`;
       prompt = `Draft a ${action.toLowerCase()} based on this:\n\n${context}`;
     }
 
-    sendMessage(prompt);
+    // Direct API call — no visible user message
+    const draftMessages = [...messages, { role: "user" as const, content: prompt }];
+    const draftIdx = messages.length; // index where the draft response will go
+    setMessages(prev => [...prev, { role: "assistant", content: "", interactionMode, draftLabel: action }]);
+    setStreaming(true);
+
+    const thisConvId = activeConvId;
+    streamingConvRef.current = thisConvId;
+
+    try {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: draftMessages, mode: chatMode, interactionMode }) });
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+          setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: action }; return copy; });
+        }
+      }
+      fullText = cleanResponse(fullText);
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: action }; return copy; });
+      }
+      if (thisConvId) saveMessage("assistant", fullText);
+    } catch {
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: "Failed to generate draft.", interactionMode, draftLabel: action }; return copy; });
+      }
+    } finally {
+      streamingConvRef.current = null;
+      setStreaming(false);
+      setBgStreaming(prev => { const next = new Set(prev); next.delete(thisConvId || ""); return next; });
+    }
   }
 
   function handleClarifyOption(option: string) {
@@ -1020,7 +1059,7 @@ ${context}`;
                 <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
-                      msgInteractionMode={msg.interactionMode || "client"}
+                      msgInteractionMode={msg.interactionMode || "client"} draftLabel={msg.draftLabel}
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
