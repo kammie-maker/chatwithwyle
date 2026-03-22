@@ -157,8 +157,12 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
   return (
     <div className="flex gap-3 max-w-[85%]">
-      <div className="w-7 h-7 shrink-0 flex items-center justify-center mt-0.5" style={{ background: "var(--color-mustard)", borderRadius: "8px" }}>
-        <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+      <div className="w-7 h-7 shrink-0 mt-0.5">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
+          <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+          <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+          <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
+        </svg>
       </div>
       <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0, position: "relative" }}>
         {isResearch && (
@@ -525,11 +529,11 @@ export default function Home() {
       {/* ── Header ── */}
       <header className="shrink-0 flex items-center justify-between px-5" style={{ height: 60, background: "var(--bg-header)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 8px rgba(22,22,22,0.2)" }}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 flex items-center justify-center shrink-0" style={{ background: "var(--color-mustard)", borderRadius: "8px" }}>
-            <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4.5 h-4.5" style={{ width: 18, height: 18 }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="shrink-0" style={{ width: 32, height: 32 }}>
+            <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+            <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+            <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
+          </svg>
           <h1 className="text-base font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-cream)" }}>Wyle</h1>
           {/* Tabs */}
           <div className="flex gap-1 ml-6">
@@ -592,11 +596,11 @@ export default function Home() {
           <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
               <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center" style={{ background: "rgba(204,138,57,0.1)", borderRadius: "16px" }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-8 h-8" style={{ color: "var(--color-mustard)" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-4" style={{ width: 64, height: 64 }}>
+                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+                  <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
+                </svg>
                 <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
                 <p className="text-sm mb-8" style={{ color: "rgba(22,22,22,0.45)", maxWidth: 400, margin: "0 auto" }}>Ask me anything about Freewyld Foundry, revenue management, or the short-term rental industry.</p>
                 <div className="grid grid-cols-2 gap-2 text-left" style={{ maxWidth: 560, margin: "0 auto" }}>

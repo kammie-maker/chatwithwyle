@@ -14,11 +14,11 @@ function SignInContent() {
         background: "rgba(60,59,34,0.3)", borderRadius: "16px", padding: "2.5rem 2rem",
         boxShadow: "0 8px 32px rgba(0,0,0,0.3)", border: "1px solid rgba(237,233,225,0.15)",
       }}>
-        <div className="w-14 h-14 mx-auto mb-4 flex items-center justify-center" style={{ background: "var(--color-mustard)", borderRadius: "12px" }}>
-          <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-7 h-7">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-        </div>
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-4" style={{ width: 56, height: 56 }}>
+          <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+          <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+          <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
+        </svg>
         <h1 className="text-2xl font-semibold mb-1" style={{ fontFamily: "var(--font-heading)", color: "var(--color-cream)" }}>Wyle</h1>
         <p className="text-sm mb-8" style={{ color: "var(--color-mustard)", fontFamily: "var(--font-body)" }}>Freewyld Foundry AI Assistant</p>
 
