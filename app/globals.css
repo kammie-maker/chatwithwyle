@@ -2,14 +2,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,300;0,400;0,600;1,300&display=swap');
 
 :root {
-  --color-onyx:    #161616;
-  --color-bark:    #663925;
-  --color-mustard: #CC8A39;
-  --color-olive:   #3c3b22;
-  --color-cream:   #f8f6ee;
-  --color-tan:     #EDE9E1;
-  --font-display:  'Playfair Display', Georgia, serif;
-  --font-body:     'Open Sans', -apple-system, sans-serif;
+  --color-onyx:        #161616;
+  --color-bark:        #663925;
+  --color-mustard:     #CC8A39;
+  --color-olive:       #3c3b22;
+  --color-cream:       #f8f6ee;
+  --color-light-cream: #EDE9E1;
+  --color-tan:         #EDE9E1;
+  --color-white:       #ffffff;
+
+  --bg-header:  var(--color-onyx);
+  --bg-footer:  var(--color-onyx);
+  --bg-sidebar: var(--color-olive);
+  --bg-content: var(--color-cream);
+  --bg-card:    var(--color-white);
+
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'Open Sans', -apple-system, sans-serif;
+  --font-mono:    'Courier New', Courier, monospace;
 }
 
 body {
@@ -17,4 +28,9 @@ body {
   color: var(--color-onyx);
   font-family: var(--font-body);
   margin: 0;
+}
+
+/* Sidebar collapse transition */
+.sidebar-transition {
+  transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease, opacity 0.15s ease;
 }
