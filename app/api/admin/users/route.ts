@@ -75,9 +75,11 @@ interface UserRecord {
   email: string;
   name: string;
   role: "admin" | "standard";
-  status: "active" | "disabled";
+  status: "active" | "suspended" | "pending";
   lastLogin: string | null;
   createdAt: string;
+  suspendedAt?: string | null;
+  sessionRevokedAt?: string | null;
 }
 
 const SEED_ADMINS = [
@@ -139,7 +141,7 @@ export async function POST(req: Request) {
     email: key,
     name: name || key.split("@")[0],
     role: role as "admin" | "standard",
-    status: "active",
+    status: "pending",
     lastLogin: null,
     createdAt: new Date().toISOString(),
   };
@@ -155,7 +157,7 @@ export async function PUT(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role, status } = await req.json();
+  const { email, role, action } = await req.json();
   if (!email) return Response.json({ error: "email required" }, { status: 400 });
 
   const users = await fetchUsersFromDrive();
@@ -165,7 +167,27 @@ export async function PUT(req: Request) {
   }
 
   if (role) users[key].role = role;
-  if (status) users[key].status = status;
+
+  if (action === "suspend") {
+    users[key].status = "suspended";
+    users[key].suspendedAt = new Date().toISOString();
+    users[key].sessionRevokedAt = new Date().toISOString();
+  } else if (action === "unsuspend") {
+    users[key].status = "active";
+    users[key].suspendedAt = null;
+  } else if (action === "revoke_sessions") {
+    users[key].sessionRevokedAt = new Date().toISOString();
+  } else if (action === "revoke_all") {
+    // Revoke sessions for ALL users except the caller
+    const callerEmail = session.user.email?.toLowerCase();
+    for (const k in users) {
+      if (k !== callerEmail) {
+        users[k].sessionRevokedAt = new Date().toISOString();
+      }
+    }
+  } else if (action === "activate_pending") {
+    users[key].status = "active";
+  }
 
   await saveUsersToDrive(users);
   return Response.json({ success: true, user: users[key] });

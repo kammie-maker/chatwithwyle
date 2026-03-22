@@ -26,6 +26,8 @@ function SignInContent() {
           <div className="mb-4 px-4 py-3 text-sm" style={{ borderRadius: "10px", background: "rgba(180,30,30,0.15)", color: "#f87171", border: "1px solid rgba(180,30,30,0.3)" }}>
             {error === "AccessDenied"
               ? "Access restricted to Freewyld team members (@freewyld.com)"
+              : error === "Suspended"
+              ? "Your account has been suspended. Contact your admin."
               : "Sign in failed. Please try again."}
           </div>
         )}
