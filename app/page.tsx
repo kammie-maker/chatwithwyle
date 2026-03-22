@@ -69,6 +69,25 @@ const MODE_QUESTIONS: Record<ChatMode, string[]> = {
   ],
 };
 
+function renderDiff(raw: string): string {
+  // Escape HTML first
+  let html = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Replace DEL markers with styled spans
+  html = html.replace(
+    /\[\[DEL\]\]([\s\S]*?)\[\[\/DEL\]\]/g,
+    '<span style="background:rgba(180,30,30,0.12);color:#b91c1c;text-decoration:line-through;border-radius:2px;padding:0 2px">$1</span>'
+  );
+  // Replace ADD markers with styled spans
+  html = html.replace(
+    /\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g,
+    '<span style="background:rgba(60,59,34,0.15);color:#3c3b22;border-radius:2px;padding:0 2px">$1</span>'
+  );
+  return html;
+}
+
 export default function Home() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
@@ -117,6 +136,9 @@ export default function Home() {
   const [editChatHistory, setEditChatHistory] = useState<EditChatMsg[]>([]);
   const [editStreaming, setEditStreaming] = useState(false);
   const editChatEndRef = useRef<HTMLDivElement>(null);
+
+  // Track changes state
+  const [pendingDiff, setPendingDiff] = useState<string | null>(null); // raw text with [[DEL]]/[[ADD]] markers
 
   // Check auth on mount
   useEffect(() => {
@@ -307,6 +329,7 @@ export default function Home() {
     setEditorLoading(true);
     setEditChatHistory([]);
     setEditChatInput("");
+    setPendingDiff(null);
     try {
       const res = await fetch(`/api/kb-file?fileId=${encodeURIComponent(file.id)}`);
       const data = await res.json();
@@ -349,6 +372,7 @@ export default function Home() {
     setEditorOriginal("");
     setEditChatHistory([]);
     setEditChatInput("");
+    setPendingDiff(null);
   }
 
   async function sendEditChat() {
@@ -359,6 +383,7 @@ export default function Home() {
     const newHistory = [...editChatHistory, userMsg].slice(-5);
     setEditChatHistory(newHistory);
     setEditStreaming(true);
+    setPendingDiff(null);
 
     try {
       const res = await fetch("/api/kb-file-edit", {
@@ -379,15 +404,51 @@ export default function Home() {
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
-        setEditorContent(fullText);
+        setPendingDiff(fullText);
       }
-      setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Changes applied to editor. Review and Save when ready." }].slice(-5));
+      // Check if response has diff markers
+      if (fullText.includes("[[DEL]]") || fullText.includes("[[ADD]]")) {
+        setPendingDiff(fullText);
+        setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Changes suggested. Review and Accept or Reject above." }].slice(-5));
+      } else {
+        // No markers — Claude answered a question instead of editing. Show as chat message, don't touch content.
+        setPendingDiff(null);
+        setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: fullText }].slice(-5));
+      }
     } catch {
       setToast("Edit failed");
+      setPendingDiff(null);
       setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Failed to process edit request." }].slice(-5));
     } finally {
       setEditStreaming(false);
     }
+  }
+
+  function acceptAllChanges() {
+    if (!pendingDiff) return;
+    // Remove DEL blocks entirely, keep ADD content without markers
+    let clean = pendingDiff;
+    clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, "");
+    clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1");
+    setEditorContent(clean);
+    setPendingDiff(null);
+    // Auto-save
+    if (selectedFile) {
+      setSaving(true);
+      fetch("/api/kb-file", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: selectedFile.id, content: clean }),
+      }).then(r => r.json()).then(data => {
+        if (data.error) { setToast("Save failed"); }
+        else { setEditorOriginal(clean); setToast("Changes saved"); setConfirmRewrite(true); loadKbFiles(); }
+      }).catch(() => setToast("Save failed")).finally(() => setSaving(false));
+    }
+  }
+
+  function rejectAllChanges() {
+    setPendingDiff(null);
+    setToast("Changes rejected");
   }
 
   async function triggerRewrite() {
@@ -848,50 +909,112 @@ export default function Home() {
               <>
                 {/* Top: File content (60%) */}
                 <div className="flex flex-col" style={{ flex: "0 0 60%", minHeight: 0 }}>
+                  {/* Header bar */}
                   <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
                     <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-display)" }}>{selectedFile.name}</h2>
                     <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={cancelEdit}
-                        className="px-3 py-1.5 text-xs font-semibold transition-all"
-                        style={{
-                          borderRadius: "6px", background: "transparent",
-                          border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)",
-                          cursor: "pointer",
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={saveFile}
-                        disabled={saving || editorContent === editorOriginal}
-                        className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
-                        style={{
-                          borderRadius: "6px", background: "var(--color-mustard)",
-                          color: "var(--color-cream)", border: "none", cursor: "pointer",
-                        }}
-                      >
-                        {saving ? "Saving\u2026" : "Save"}
-                      </button>
+                      {!pendingDiff && !editStreaming && (
+                        <>
+                          <button
+                            onClick={cancelEdit}
+                            className="px-3 py-1.5 text-xs font-semibold transition-all"
+                            style={{
+                              borderRadius: "6px", background: "transparent",
+                              border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={saveFile}
+                            disabled={saving || editorContent === editorOriginal}
+                            className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
+                            style={{
+                              borderRadius: "6px", background: "var(--color-mustard)",
+                              color: "var(--color-cream)", border: "none", cursor: "pointer",
+                            }}
+                          >
+                            {saving ? "Saving\u2026" : "Save"}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <textarea
-                    value={editorContent}
-                    onChange={e => setEditorContent(e.target.value)}
-                    className="flex-1 w-full p-4 resize-none focus:outline-none"
-                    style={{
-                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                      fontSize: "13px",
-                      lineHeight: "1.6",
-                      color: "var(--color-onyx)",
-                      background: "var(--color-cream)",
-                      border: "none",
-                      overflow: "auto",
-                    }}
-                    spellCheck={false}
-                  />
+
+                  {/* Track changes banner + accept/reject */}
+                  {(pendingDiff || editStreaming) && (
+                    <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "rgba(60,59,34,0.06)", borderBottom: "1px solid rgba(22,22,22,0.08)" }}>
+                      <span className="text-xs font-medium" style={{ color: "var(--color-olive)" }}>
+                        {editStreaming ? "Generating changes..." : "Review suggested changes before saving"}
+                      </span>
+                      {pendingDiff && !editStreaming && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={rejectAllChanges}
+                            className="px-3 py-1 text-xs font-semibold transition-all"
+                            style={{
+                              borderRadius: "6px", background: "transparent",
+                              border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}
+                          >
+                            Reject All
+                          </button>
+                          <button
+                            onClick={acceptAllChanges}
+                            disabled={saving}
+                            className="px-3 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
+                            style={{
+                              borderRadius: "6px", background: "var(--color-olive)",
+                              color: "var(--color-cream)", border: "none", cursor: "pointer",
+                            }}
+                          >
+                            {saving ? "Saving\u2026" : "Accept All Changes"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Content area */}
+                  {pendingDiff || editStreaming ? (
+                    /* Track changes rich view */
+                    <div
+                      className="flex-1 p-4 overflow-auto"
+                      style={{
+                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontSize: "13px",
+                        lineHeight: "1.6",
+                        color: "var(--color-onyx)",
+                        background: "var(--color-cream)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                      dangerouslySetInnerHTML={{ __html: renderDiff(pendingDiff || "") }}
+                    />
+                  ) : (
+                    /* Normal editable textarea */
+                    <textarea
+                      value={editorContent}
+                      onChange={e => setEditorContent(e.target.value)}
+                      className="flex-1 w-full p-4 resize-none focus:outline-none"
+                      style={{
+                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontSize: "13px",
+                        lineHeight: "1.6",
+                        color: "var(--color-onyx)",
+                        background: "var(--color-cream)",
+                        border: "none",
+                        overflow: "auto",
+                      }}
+                      spellCheck={false}
+                    />
+                  )}
                 </div>
 
                 {/* Divider */}

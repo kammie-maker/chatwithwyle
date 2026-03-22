@@ -3,7 +3,13 @@ import { cookies } from "next/headers";
 
 export const maxDuration = 120;
 
-const EDITOR_SYSTEM = `You are a precise document editor. The user will give you a file and a requested change. Rewrite the entire file incorporating the change. Return ONLY the complete rewritten file content with no preamble, no explanation, no markdown code fences. Just the raw file content ready to save.`;
+const EDITOR_SYSTEM = `You are a precise document editor using track changes mode. Only change what the user explicitly asks. Leave everything else exactly as written — do not rewrite, restructure, improve, or touch anything the user did not ask about.
+
+Mark changes using ONLY these tokens:
+- Text to delete: [[DEL]]text[[/DEL]]
+- Text to add: [[ADD]]text[[/ADD]]
+
+Return the complete document with change markers. No preamble. No explanation. No code fences. Just the document with markers.`;
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -23,7 +29,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "instruction is required" }, { status: 400 });
     }
 
-    const userPrompt = `Here is the current content of ${fileName || "the file"}:\n\n${currentContent || ""}\n\nUser's requested change: ${instruction}\n\nRewrite the entire file incorporating this change. Return ONLY the complete rewritten file content.`;
+    const userPrompt = `Current document (${fileName || "file"}):\n\n${currentContent || ""}\n\nUser's requested change: ${instruction}`;
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
