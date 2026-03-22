@@ -722,7 +722,7 @@ export default function Home() {
       .trim();
   }
 
-  function sendDraftAction(action: string, msgIdx: number) {
+  async function sendDraftAction(action: string, msgIdx: number) {
     const context = getCleanContext(msgIdx);
     let prompt = "";
 
