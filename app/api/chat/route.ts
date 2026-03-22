@@ -60,6 +60,8 @@ const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EV
 - Never write the text 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' or any combination of these as words in your response. These are UI buttons rendered by the interface. Never reference them in response text.
 - Never use a pipe character (|) anywhere in any response.
 
+- Every question asked is assumed to be about Freewyld Foundry specifically. Never answer in general terms about the STR industry or sales in general. Always anchor answers to Freewyld's specific service, clients, results, pricing, guarantee, team, and processes. If asked about objections, answer with the objections Freewyld's sales team actually hears. If asked about results, answer with Freewyld's actual client results. If asked about process, answer with Freewyld's actual process. If the knowledge base does not contain a Freewyld-specific answer to a question, say 'I don't have enough Freewyld-specific information on that yet. Try adding it to the knowledge base or ask a more specific question.' Never substitute a generic industry answer when a Freewyld-specific answer is not available.
+
 All other formatting and structural rules are defined by the active Skill file for the current chat mode. Follow the Skill file instructions exactly.`;
 
 const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — INTERNAL RESEARCH MODE:
