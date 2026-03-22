@@ -80,6 +80,29 @@ interface UserRecord {
   createdAt: string;
 }
 
+const SEED_ADMINS = [
+  { email: "kammie@freewyld.com", name: "Kammie" },
+  { email: "eric@freewyld.com", name: "Eric" },
+];
+
+async function ensureAdminsSeed(users: Record<string, UserRecord>): Promise<boolean> {
+  let changed = false;
+  for (const admin of SEED_ADMINS) {
+    if (!users[admin.email]) {
+      users[admin.email] = {
+        email: admin.email,
+        name: admin.name,
+        role: "admin",
+        status: "active",
+        lastLogin: null,
+        createdAt: new Date().toISOString(),
+      };
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // GET: list all users
 export async function GET() {
   const session = await getServerSession(getAuthOptions());
@@ -88,6 +111,9 @@ export async function GET() {
   }
 
   const users = await fetchUsersFromDrive();
+  const seeded = await ensureAdminsSeed(users);
+  if (seeded) await saveUsersToDrive(users);
+
   return Response.json({ users: Object.values(users) });
 }
 
