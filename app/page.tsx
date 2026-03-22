@@ -380,7 +380,13 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Auth handled by NextAuth middleware — no manual check needed
+  // Load user preferences on mount
+  useEffect(() => {
+    fetch("/api/user/preferences").then(r => r.json()).then(data => {
+      if (data.defaultMode && ["sales", "client-success", "fulfillment", "onboarding"].includes(data.defaultMode)) setChatMode(data.defaultMode);
+      if (data.defaultInteraction && ["client", "research"].includes(data.defaultInteraction)) setInteractionMode(data.defaultInteraction);
+    }).catch(() => {});
+  }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
   useEffect(() => {

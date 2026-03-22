@@ -13,6 +13,8 @@ interface User {
   createdAt: string;
   suspendedAt?: string | null;
   sessionRevokedAt?: string | null;
+  defaultMode?: string;
+  defaultInteraction?: string;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
@@ -31,6 +33,8 @@ export default function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"standard" | "admin">("standard");
+  const [inviteMode, setInviteMode] = useState("sales");
+  const [inviteInteraction, setInviteInteraction] = useState("client");
   const [inviting, setInviting] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ type: string; email: string; name: string } | null>(null);
 
@@ -52,7 +56,8 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/users", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...updates }) });
       const data = await res.json();
       if (data.error) { setToast(data.error); return; }
-      setToast(updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : "User updated");
+      const msg = updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : updates.defaultMode || updates.defaultInteraction ? "Preferences updated" : "User updated";
+      setToast(msg);
       loadUsers();
     } catch { setToast("Update failed"); }
   }
@@ -81,7 +86,7 @@ export default function AdminPage() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, name: inviteName.trim() }) });
+      const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, name: inviteName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) });
       const data = await res.json();
       if (data.error) { setToast(data.error); setInviting(false); return; }
       setToast("Invitation sent to " + inviteEmail.trim());
@@ -143,10 +148,11 @@ export default function AdminPage() {
 
         {/* Active users table */}
         <div style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden" }}>
-          <div className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)" }}>
-            {["Name", "Email", "Role", "Status", "Last Login", "Actions"].map((h, i) => (
-              <div key={h} style={{ flex: i === 5 ? 1 : i === 0 ? "0 0 160px" : i === 1 ? "0 0 200px" : i === 2 ? "0 0 110px" : i === 3 ? "0 0 100px" : "0 0 130px", fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: i === 5 ? "right" : "left" }}>{h}</div>
-            ))}
+          <div className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)", minWidth: 1050 }}>
+            {["Name", "Email", "Role", "Status", "Mode", "Type", "Last Login", "Actions"].map((h, i) => {
+              const widths = ["0 0 140px", "0 0 180px", "0 0 100px", "0 0 90px", "0 0 130px", "0 0 110px", "0 0 110px"];
+              return <div key={h} style={{ flex: i === 7 ? 1 : widths[i], fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: i === 7 ? "right" : "left" }}>{h}</div>;
+            })}
           </div>
 
           {loading ? (
@@ -157,23 +163,39 @@ export default function AdminPage() {
             activeUsers.map(user => {
               const st = STATUS_STYLES[user.status] || STATUS_STYLES.active;
               return (
-                <div key={user.email} className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)" }}>
-                  <div style={{ flex: "0 0 160px", fontSize: 14, fontWeight: 500, color: "var(--color-onyx)" }}>{user.name}</div>
-                  <div style={{ flex: "0 0 200px", fontSize: 13, color: "rgba(22,22,22,0.6)" }}>{user.email}</div>
-                  <div style={{ flex: "0 0 110px" }}>
+                <div key={user.email} className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)", minWidth: 1050 }}>
+                  <div style={{ flex: "0 0 140px", fontSize: 14, fontWeight: 500, color: "var(--color-onyx)" }}>{user.name}</div>
+                  <div style={{ flex: "0 0 180px", fontSize: 13, color: "rgba(22,22,22,0.6)" }}>{user.email}</div>
+                  <div style={{ flex: "0 0 100px" }}>
                     <select value={user.role} onChange={e => updateUser(user.email, { role: e.target.value })}
-                      style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
+                      style={{ fontSize: 11, padding: "2px 6px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
                       <option value="standard">Standard</option>
                       <option value="admin">Admin</option>
                     </select>
                   </div>
-                  <div style={{ flex: "0 0 100px" }}>
+                  <div style={{ flex: "0 0 90px" }}>
                     <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, fontWeight: 600, background: st.bg, color: st.color }}>
                       {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                     </span>
                   </div>
-                  <div style={{ flex: "0 0 130px", fontSize: 12, color: "rgba(22,22,22,0.45)" }}>
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Never"}
+                  <div style={{ flex: "0 0 130px" }}>
+                    <select value={user.defaultMode || "sales"} onChange={e => updateUser(user.email, { defaultMode: e.target.value })}
+                      style={{ fontSize: 11, padding: "2px 4px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
+                      <option value="sales">Sales</option>
+                      <option value="client-success">Client Success</option>
+                      <option value="fulfillment">Fulfillment</option>
+                      <option value="onboarding">Onboarding</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: "0 0 110px" }}>
+                    <select value={user.defaultInteraction || "client"} onChange={e => updateUser(user.email, { defaultInteraction: e.target.value })}
+                      style={{ fontSize: 11, padding: "2px 4px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
+                      <option value="client">Client</option>
+                      <option value="research">Research</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: "0 0 110px", fontSize: 12, color: "rgba(22,22,22,0.45)" }}>
+                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Never"}
                   </div>
                   <div style={{ flex: 1, textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     <button onClick={() => setConfirmAction({ type: "revoke", email: user.email, name: user.name })}
@@ -262,13 +284,33 @@ export default function AdminPage() {
               style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)" }}
               onFocus={e => e.currentTarget.style.borderColor = "var(--color-mustard)"}
               onBlur={e => e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"} />
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Role</span>
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin" | "standard")}
-                style={{ fontSize: 13, padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)" }}>
-                <option value="standard">Standard</option>
-                <option value="admin">Admin</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Role</span>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin" | "standard")}
+                  style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)" }}>
+                  <option value="standard">Standard</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Mode</span>
+                <select value={inviteMode} onChange={e => setInviteMode(e.target.value)}
+                  style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)" }}>
+                  <option value="sales">Sales</option>
+                  <option value="client-success">Client Success</option>
+                  <option value="fulfillment">Fulfillment</option>
+                  <option value="onboarding">Onboarding</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Type</span>
+                <select value={inviteInteraction} onChange={e => setInviteInteraction(e.target.value)}
+                  style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)" }}>
+                  <option value="client">Client</option>
+                  <option value="research">Research</option>
+                </select>
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteName(""); }}

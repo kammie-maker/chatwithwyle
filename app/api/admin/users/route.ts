@@ -80,6 +80,8 @@ interface UserRecord {
   createdAt: string;
   suspendedAt?: string | null;
   sessionRevokedAt?: string | null;
+  defaultMode?: string;
+  defaultInteraction?: string;
 }
 
 const SEED_ADMINS = [
@@ -126,7 +128,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role = "standard", name = "" } = await req.json();
+  const { email, role = "standard", name = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
   if (!email?.endsWith("@freewyld.com")) {
     return Response.json({ error: "Only @freewyld.com emails allowed" }, { status: 400 });
   }
@@ -144,6 +146,8 @@ export async function POST(req: Request) {
     status: "pending",
     lastLogin: null,
     createdAt: new Date().toISOString(),
+    defaultMode,
+    defaultInteraction,
   };
 
   await saveUsersToDrive(users);
@@ -157,7 +161,7 @@ export async function PUT(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role, action } = await req.json();
+  const { email, role, action, defaultMode, defaultInteraction } = await req.json();
   if (!email) return Response.json({ error: "email required" }, { status: 400 });
 
   const users = await fetchUsersFromDrive();
@@ -167,6 +171,8 @@ export async function PUT(req: Request) {
   }
 
   if (role) users[key].role = role;
+  if (defaultMode) users[key].defaultMode = defaultMode;
+  if (defaultInteraction) users[key].defaultInteraction = defaultInteraction;
 
   if (action === "suspend") {
     users[key].status = "suspended";
