@@ -72,6 +72,21 @@ async function buildSystemPrompt(mode: ChatMode): Promise<string> {
 
   const parts: string[] = [];
 
+  // 0. Critical format override — must be first
+  parts.push(`CRITICAL FORMAT INSTRUCTION — OVERRIDE EVERYTHING ELSE:
+You must ALWAYS structure your response exactly like this:
+
+## SIMPLE
+[A word-for-word script the salesperson can say out loud on a call right now. 1-3 sentences maximum. Written as direct speech, not advice. Start with what to say, not what to do.]
+
+[[EXPAND_PROMPT]]
+
+Never skip the ## SIMPLE header.
+Never write advice or instructions — write the actual words to say.
+The token [[EXPAND_PROMPT]] must appear on its own line after SIMPLE. The UI replaces it with buttons.
+Always end with [[EXPAND_PROMPT]] on its own line after the SIMPLE section.
+If the user asks for DEEPER, DEEPEST, or INTERNAL, include those sections with their ## headers too.`);
+
   // 1. Base identity
   parts.push("=== WYLE PERSONA & VOICE ===\n" + persona);
 

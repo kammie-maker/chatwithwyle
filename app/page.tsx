@@ -72,12 +72,14 @@ const MODE_QUESTIONS: Record<ChatMode, string[]> = {
 // ── Structured response parsing ──
 
 interface ParsedSection { key: string; label: string; content: string }
-interface ParsedResponse { sections: ParsedSection[]; clarify: { question: string; options: string[] } | null; raw: string; hasStructure: boolean }
+interface ParsedResponse { sections: ParsedSection[]; clarify: { question: string; options: string[] } | null; raw: string; hasStructure: boolean; hadExpandToken: boolean }
 
 const SECTION_HEADERS = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE", "STRATEGY", "ANSWER TO CLIENT", "PROBLEM", "OPTIONS", "RECOMMENDATION"];
 const EXPAND_ORDER = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
 
 function parseResponse(text: string): ParsedResponse {
+  // Detect expand token before stripping
+  const hadExpandToken = text.includes("[[EXPAND_PROMPT]]");
   // Strip tokens that should never render
   let raw = text.replace(/\[\[EXPAND_PROMPT\]\]/g, "").trim();
   let clarify: ParsedResponse["clarify"] = null;
@@ -104,9 +106,8 @@ function parseResponse(text: string): ParsedResponse {
   }
 
   if (matches.length === 0) {
-    // No structured sections found — check if response contains expand-worthy content anyway
-    // Treat entire response as SIMPLE with hasStructure false
-    return { sections: [{ key: "SIMPLE", label: "SIMPLE", content: raw }], clarify, raw, hasStructure: false };
+    // No structured sections found — treat entire response as SIMPLE
+    return { sections: [{ key: "SIMPLE", label: "SIMPLE", content: raw }], clarify, raw, hasStructure: false, hadExpandToken };
   }
 
   for (let j = 0; j < matches.length; j++) {
@@ -120,7 +121,7 @@ function parseResponse(text: string): ParsedResponse {
     }
   }
 
-  return { sections, clarify, raw, hasStructure: sections.length > 0 };
+  return { sections, clarify, raw, hasStructure: sections.length > 0, hadExpandToken };
 }
 
 const MODE_ACTIONS: Record<ChatMode, string[]> = {
@@ -223,9 +224,37 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, expandedSection
             )}
           </div>
         ) : (
-          <div className="px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">
-            {text}
-            {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
+          <div className="px-4 py-3">
+            <div className="text-sm leading-relaxed whitespace-pre-wrap">
+              {parsed.sections[0]?.content || text}
+              {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
+            </div>
+            {/* Show expand pills even without structure if [[EXPAND_PROMPT]] was present */}
+            {!isStreaming && parsed.hadExpandToken && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {["DEEPER", "DEEPEST", "INTERNAL"].map(k => (
+                  <button key={k} onClick={() => handleDraftAction(`Show me the ${k} section`)}
+                    style={{ borderRadius: 20, background: "transparent", border: "1px solid #3c3b22", color: "#3c3b22", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    + {k}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Action buttons */}
+            {!isStreaming && parsed.hadExpandToken && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {MODE_ACTIONS[chatMode].map(action => (
+                  <button key={action} onClick={() => handleDraftAction(action)}
+                    style={{ borderRadius: 20, background: "transparent", border: "1px solid #663925", color: "#663925", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.08)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    {action}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
