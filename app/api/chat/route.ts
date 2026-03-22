@@ -78,6 +78,9 @@ FORMATTING RULES:
 - Never use bold text inside paragraphs
 - Assume mid-conversation
 - No greetings
+- Never ask the user if they want DEEPER, DEEPEST, INTERNAL, or any combination. Never write any sentence that prompts the user to request more sections. The [[EXPAND_PROMPT]] token is the only indicator. Never describe or reference expand buttons in your response text.
+- Never write the text 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' or any combination as words in your response. These are UI buttons. Never reference them.
+- Never use a pipe character (|) anywhere in any response.
 - No INTERNAL FULL PICTURE section. Everything here is already internal`;
 
 async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode = "client"): Promise<string> {

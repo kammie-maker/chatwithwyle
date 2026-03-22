@@ -206,13 +206,15 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
         </svg>
       </div>
-      <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0, position: "relative" }}>
-        {isResearch && (
-          <div style={{ position: "absolute", top: 8, right: 8, background: "#3c3b22", color: "#f8f6ee", fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>INTERNAL</div>
+      <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0 }}>
+        {/* Label row: INTERNAL badge and/or Draft label */}
+        {(isResearch || isDraft) && (
+          <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
+            {isResearch && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "#3c3b22", color: "#f8f6ee", fontWeight: 600 }}>INTERNAL</span>}
+            {isDraft && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "rgba(22,22,22,0.45)", fontWeight: 600 }}>{draftLabel}</span>}
+          </div>
         )}
-        <div className="px-4 py-3">
-          {/* Draft label */}
-          {isDraft && <div className="mb-2"><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "rgba(22,22,22,0.45)", fontWeight: 600 }}>{draftLabel}</span></div>}
+        <div className="px-4 py-3" style={isResearch || isDraft ? { paddingTop: 8 } : undefined}>
           {/* SIMPLE / base content */}
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
           {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
