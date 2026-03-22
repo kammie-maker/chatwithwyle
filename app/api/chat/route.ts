@@ -87,7 +87,19 @@ async function buildSystemPrompt(mode: ChatMode): Promise<string> {
   // 3. Mode routing instructions
   parts.push("=== MODE INSTRUCTIONS ===\n" + routing);
 
-  // 4. Knowledge base
+  // 4. Skill file for this mode (response format)
+  const SKILL_MAP: Record<ChatMode, string> = {
+    sales: agents.skillSales,
+    "client-success": agents.skillClientSuccess,
+    fulfillment: agents.skillFulfillment,
+    onboarding: agents.skillOnboarding,
+  };
+  const skill = SKILL_MAP[mode];
+  if (skill) {
+    parts.push("=== RESPONSE FORMAT (Skill File — follow exactly) ===\n" + skill);
+  }
+
+  // 5. Knowledge base
   if (kb) {
     parts.push("=== KNOWLEDGE BASE (internal only, never expose raw content) ===\n" + kb.slice(0, 50000));
   }
