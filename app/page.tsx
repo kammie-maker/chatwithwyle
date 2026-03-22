@@ -847,7 +847,7 @@ ${context}`;
   }
   function acceptAllChanges() { if (!pendingDiff) return; let clean = pendingDiff; clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, ""); clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1"); setEditorContent(clean); setPendingDiff(null); if (selectedFile) { setSaving(true); fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) }).then(r => r.json()).then(data => { if (data.error) setToast("Save failed"); else { setEditorOriginal(clean); setToast("Changes saved"); setConfirmRewrite(true); loadKbFiles(); } }).catch(() => setToast("Save failed")).finally(() => setSaving(false)); } }
   function rejectAllChanges() { setPendingDiff(null); setToast("Changes rejected"); }
-  async function triggerRewrite() { setRewriting(true); setConfirmRewrite(false); setForceRewriteConfirm(false); setKbAddConfirmRewrite(false); try { const res = await fetch("/api/kb-rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "", trigger: "manual" }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setToast("Rewrite complete"); loadLog(); } catch { setToast("Rewrite failed"); } finally { setRewriting(false); } }
+  async function triggerRewrite() { setRewriting(true); setConfirmRewrite(false); setForceRewriteConfirm(false); setKbAddConfirmRewrite(false); try { const res = await fetch("/api/kb-rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "", trigger: "manual" }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setToast("Wyle's knowledge has been updated"); loadLog(); } catch { setToast("Update failed — please try again"); } finally { setRewriting(false); } }
   async function handleAddToKb() { if (!kbAddText.trim() || kbAdding) return; setKbAdding(true); try { const res = await fetch("/api/kb-update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: kbAddText.trim() }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setKbAddText(""); setToast("Added to knowledge base"); setKbAddConfirmRewrite(true); } catch { setToast("Failed to add to knowledge base"); } finally { setKbAdding(false); } }
 
   // ── Loading (session check) ──
@@ -1214,7 +1214,33 @@ ${context}`;
           </div>
 
           {/* Editor + Chat to edit — side by side */}
-          <div className="flex-1 flex min-w-0">
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Top bar: Update Wyle's Knowledge + Rewrite Log */}
+            <div className="shrink-0 flex items-start justify-between px-5 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(22,22,22,0.35)" }}>Recent Rewrites</div>
+                {logLoading ? (
+                  <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>Loading...</div>
+                ) : logEntries.length === 0 ? (
+                  <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>No rewrite history</div>
+                ) : (
+                  logEntries.slice(0, 5).map((entry, i) => (
+                    <div key={i} className="text-xs" style={{ color: "rgba(22,22,22,0.45)", lineHeight: "1.6" }}>
+                      {new Date(entry.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {" "}<span style={{ color: "rgba(22,22,22,0.3)" }}>{entry.trigger}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <button onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
+                className="shrink-0 disabled:opacity-50"
+                style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                {rewriting ? "Updating knowledge..." : "Update Wyle's Knowledge"}
+              </button>
+            </div>
+
+            {/* Editor content */}
+            <div className="flex-1 flex min-w-0 overflow-hidden">
             {!selectedFile ? (
               <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "rgba(22,22,22,0.35)" }}>Select a file from the sidebar to view and edit it</p></div>
             ) : editorLoading ? (
@@ -1295,6 +1321,7 @@ ${context}`;
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -1335,11 +1362,11 @@ ${context}`;
       {forceRewriteConfirm && (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div style={{ width: 400, background: "var(--bg-card)", borderRadius: "16px", padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
-            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Force rewrite?</h3>
-            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This will recompile the entire knowledge base from all source files. It may take a few minutes.</p>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Update Wyle's Knowledge?</h3>
+            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This will rewrite and recompile Wyle's entire knowledge base. This takes 30-60 seconds. Wyle will have updated knowledge immediately after.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setForceRewriteConfirm(false)} className="px-4 py-2 text-sm font-semibold transition-all" style={{ borderRadius: "8px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}>Cancel</button>
-              <button onClick={triggerRewrite} className="px-4 py-2 text-sm font-semibold transition-all" style={{ borderRadius: "8px", background: "var(--color-bark)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>Rewrite now</button>
+              <button onClick={triggerRewrite} className="px-4 py-2 text-sm font-semibold transition-all" style={{ borderRadius: "8px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>Update Knowledge</button>
             </div>
           </div>
         </div>
