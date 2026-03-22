@@ -174,10 +174,10 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, onCopyBrief, handleClarifyOption, clarifyInput, setClarifyInput }: {
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
   text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode; draftLabel?: string;
   inlineExpanded: Record<string, string>; expandLoading: string | undefined; expandingAll: boolean;
-  onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void; onCopyBrief: () => void;
+  onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void;
   handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
@@ -286,13 +286,13 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
           {/* Action buttons */}
           {showPills && !expandLoading && (
-            <div className="flex flex-wrap mt-2" style={{ gap: 8 }}>
+            <div className="flex flex-wrap mt-2" style={{ gap: isResearch ? 16 : 8 }}>
               {isResearch ? (
-                <button onClick={onCopyBrief}
-                  style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
-                  Copy as Brief
+                <button onClick={() => onDraft("Draft Slack to Team")}
+                  style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
+                  onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+                  onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
+                  Draft Slack to Team
                 </button>
               ) : (
                 MODE_ACTIONS[chatMode].map(action => (
@@ -783,14 +783,20 @@ Rules:
 
 Talk track to base this on:
 ${context}`;
+    } else if (action === "Draft Slack to Team") {
+      prompt = `Draft a brief internal Slack message to a team member summarizing the key insight from this response. Conversational, no sign-off, no greetings, under 3 sentences. No em dashes, no colons, no bold.
+
+Insight to summarize:
+${context}`;
     } else {
       prompt = `Draft a ${action.toLowerCase()} based on this:\n\n${context}`;
     }
 
     // Direct API call — no visible user message
+    const label = action === "Draft Slack to Team" ? "Slack Draft" : action;
     const draftMessages = [...messages, { role: "user" as const, content: prompt }];
     const draftIdx = messages.length; // index where the draft response will go
-    setMessages(prev => [...prev, { role: "assistant", content: "", interactionMode, draftLabel: action }]);
+    setMessages(prev => [...prev, { role: "assistant", content: "", interactionMode, draftLabel: label }]);
     setStreaming(true);
 
     const thisConvId = activeConvId;
@@ -807,17 +813,17 @@ ${context}`;
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: action }; return copy; });
+          setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: label }; return copy; });
         }
       }
       fullText = cleanResponse(fullText);
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: action }; return copy; });
+        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: label }; return copy; });
       }
       if (thisConvId) saveMessage("assistant", fullText);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: "Failed to generate draft.", interactionMode, draftLabel: action }; return copy; });
+        setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: "Failed to generate draft.", interactionMode, draftLabel: label }; return copy; });
       }
     } finally {
       streamingConvRef.current = null;
@@ -1065,7 +1071,6 @@ ${context}`;
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
-                      onCopyBrief={() => { const ctx = getCleanContext(i); if (ctx) { navigator.clipboard.writeText(ctx); setToast("Copied to clipboard"); } }}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
                     <div className="inline-block max-w-[80%] text-sm" style={{ background: "var(--color-bark)", borderRadius: "16px 16px 4px 16px", color: "var(--color-cream)", padding: hasMedia ? "0.5rem" : undefined }}>
