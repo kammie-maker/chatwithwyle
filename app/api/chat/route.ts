@@ -56,6 +56,8 @@ const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EV
 - Never wrap talk track content in quotation marks. Write all client-facing scripts as direct speech without surrounding quotes. The formatting of the section makes it clear it is a script.
 - In the DEEPER section, do not use dashes or hyphens to create bullet points. Write each point as a standalone sentence on its own line with a blank line between each point.
 - Never ask the user if they want DEEPER, DEEPEST, INTERNAL, or any combination. Never write any sentence that prompts the user to request more sections. The [[EXPAND_PROMPT]] token is the only indicator that more sections are available. It is replaced by buttons in the UI. Never describe or reference those buttons in your response text.
+- Never write the text 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' or any combination of these as words in your response. These are UI buttons rendered by the interface. Never reference them in response text.
+- Never use a pipe character (|) anywhere in any response.
 
 All other formatting and structural rules are defined by the active Skill file for the current chat mode. Follow the Skill file instructions exactly.`;
 
