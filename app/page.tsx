@@ -144,7 +144,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   const showPills = !isStreaming && (parsed.hasStructure || parsed.hadExpandToken);
 
   // Clean content: strip "---" horizontal rules
-  function clean(s: string) { return s.replace(/^---+$/gm, "").trim(); }
+  function clean(s: string) { return s.replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim(); }
 
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || text);
@@ -434,7 +434,7 @@ export default function Home() {
       }
 
       // Clean up final text
-      fullText = fullText.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/^---+$/gm, "").trim();
+      fullText = fullText.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim();
       // Strip the section header if Claude included it
       fullText = fullText.replace(new RegExp("^#{2,4}\\s+" + sectionKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\n?", "i"), "").trim();
 
@@ -577,7 +577,7 @@ export default function Home() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
+          <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center" style={{ background: "rgba(204,138,57,0.1)", borderRadius: "16px" }}>
@@ -632,7 +632,7 @@ export default function Home() {
           </div>
           {/* Input area */}
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
-            <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            <div style={{ maxWidth: 860, margin: "0 auto" }}>
               {pendingFiles.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-start gap-2">
                   {pendingFiles.map((f, idx) => (
