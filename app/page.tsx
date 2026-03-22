@@ -33,7 +33,7 @@ interface Conversation {
 const MODE_BADGES: Record<string, { bg: string; label: string }> = {
   sales: { bg: "#663925", label: "S" },
   "client-success": { bg: "#3c3b22", label: "CS" },
-  fulfillment: { bg: "rgba(204,138,57,0.6)", label: "F" },
+  fulfillment: { bg: "rgba(204,138,57,0.6)", label: "RM" },
   onboarding: { bg: "rgba(102,57,37,0.6)", label: "O" },
 };
 
@@ -61,54 +61,46 @@ function groupByDate(convs: Conversation[]): { label: string; items: Conversatio
 }
 
 const MODE_LABELS: Record<ChatMode, string> = {
-  sales: "Sales Chat",
-  "client-success": "Client Success Chat",
-  fulfillment: "Fulfillment Chat",
-  onboarding: "Onboarding Chat",
+  sales: "Sales",
+  "client-success": "Client Success",
+  fulfillment: "Revenue Management",
+  onboarding: "Onboarding",
 };
 
-const MODE_QUESTIONS: Record<ChatMode, string[]> = {
+interface QuestionGroup { label: string; items: string[] }
+type GroupedQuestions = Record<ChatMode, QuestionGroup[]>;
+
+const MODE_QUESTIONS: GroupedQuestions = {
   sales: [
-    "How do I handle a pricing objection?",
-    "Walk me through the revenue guarantee",
-    "How do I respond to \u2018we already have a manager\u2019?",
-    "What makes us different from other revenue managers?",
-    "How do I close someone who\u2019s on the fence?",
-    "What\u2019s the typical ROI for a new client?",
-    "Give me a discovery question opener",
-    "How do I handle \u2018I need to think about it\u2019?",
-    "What\u2019s our response to a lowball counter?",
-    "How do I reframe RPM value for a skeptic?",
+    { label: "OBJECTIONS", items: [
+      "Fee is too expensive", "Already have a revenue manager", "Need to think about it",
+      "Not the right time", "Tried revenue management before", "Want to manage pricing ourselves", "Concerned about contract length",
+    ]},
+    { label: "FAQS", items: [
+      "How the fee is calculated", "How the guarantee works", "What's included vs not included",
+      "How we measure results", "What the onboarding process looks like", "How long before we see results",
+    ]},
   ],
   "client-success": [
-    "How do I explain a down month to a client?",
-    "What\u2019s our response to a client threatening to leave?",
-    "How do I present the monthly revenue report?",
-    "What do I say when a client asks why their competitor is outperforming them?",
-    "How do I handle a client who wants more control?",
-    "What\u2019s our escalation process for unhappy clients?",
-    "How do I reframe a bad month positively?",
-    "What metrics should I lead with in a client call?",
+    { label: "COMMON CLIENT SITUATIONS", items: [
+      "Client asking about their invoice", "Client disputing a charge", "Client frustrated with results",
+      "Client asking why rates are lower than expected", "Client wants to override our pricing",
+      "Client asking about a competitor's performance", "Client requesting an urgent call", "Unreasonable hospitality situation",
+    ]},
   ],
   fulfillment: [
-    "What\u2019s our process for a new listing setup?",
-    "How do we handle orphan nights?",
-    "What\u2019s our MNS strategy for peak season?",
-    "How do we approach OTA ranking optimization?",
-    "What\u2019s our pricing review cadence?",
-    "How do we handle a client who overrides our pricing?",
-    "What\u2019s the process for a revenue audit?",
-    "How do we calculate MPI for a new market?",
+    { label: "STRATEGY AND CLIENT COMMUNICATION", items: [
+      "Presenting a pricing strategy change", "Explaining a down month to a client", "Getting buy-in on MNS adjustments",
+      "Presenting monthly results", "Handling pushback on recommendations", "Explaining OTA optimization decisions",
+      "Building client confidence in our approach", "Communicating a market shift",
+    ]},
   ],
   onboarding: [
-    "What does our first 30 days look like?",
-    "What do I need from the client in week 1?",
-    "How do I set revenue expectations at kickoff?",
-    "What\u2019s our onboarding call agenda?",
-    "How do I explain our pricing methodology to a new client?",
-    "What access do we need from the client?",
-    "How do we handle a client who\u2019s impatient for results in month 1?",
-    "What\u2019s our communication cadence with new clients?",
+    { label: "ONBOARDING PROCESS AND SITUATIONS", items: [
+      "Walking through fee calculation", "Explaining the billing process", "Setting up onboarding calls",
+      "Setting revenue expectations", "Client asking when they'll see results", "Explaining what access we need",
+      "Pre-empting pricing concerns", "Explaining the guarantee at onboarding",
+    ]},
   ],
 };
 
@@ -338,38 +330,37 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   );
 }
 
-const RESEARCH_QUESTIONS: Record<ChatMode, string[]> = {
+const RESEARCH_QUESTIONS: GroupedQuestions = {
   sales: [
-    "What are the most common reasons deals stall?",
-    "What objections are hardest to handle and why?",
-    "What do our best closes have in common?",
-    "What should I know before calling a prospect cold?",
-    "What makes a prospect a bad fit for us?",
-    "What's our competitive positioning?",
-    "How do I know when a deal is truly dead?",
-    "What does our guarantee actually cover?",
+    { label: "OBJECTIONS", items: [
+      "Handling the fee objection", "Handling the existing manager objection", "Handling the timing objection",
+      "Handling the trust objection", "Handling the contract length objection", "When to walk away from a deal",
+    ]},
+    { label: "FAQS", items: [
+      "Full fee calculation methodology", "Guarantee mechanics and limits", "What is and isn't included in RPM",
+      "How we calculate revenue uplift", "Our ideal client profile", "Competitive positioning vs alternatives",
+    ]},
   ],
   "client-success": [
-    "What are the most common reasons clients churn?",
-    "What does a healthy client relationship look like?",
-    "How do we handle an underperforming market?",
-    "What are early warning signs a client is unhappy?",
-    "How do we approach a difficult renewal conversation?",
-    "What results should a client expect in month 1?",
+    { label: "COMMON CLIENT SITUATIONS", items: [
+      "How to handle a billing dispute", "How to respond to a frustrated client", "Escalation process for unhappy clients",
+      "How to handle a pricing override request", "What to do when results are underperforming",
+      "How to respond to unreasonable requests", "Early warning signs a client may churn",
+    ]},
   ],
   fulfillment: [
-    "What are the most common pricing mistakes we see?",
-    "How do we approach a market we've never managed?",
-    "What does a full portfolio audit look like?",
-    "When should we push back on a client override?",
-    "What's our process for a new listing launch?",
+    { label: "STRATEGY AND CLIENT COMMUNICATION", items: [
+      "Technical reasoning behind MNS strategy", "How to build the case for a rate change",
+      "Analyzing a portfolio's underperformance", "OTA algorithm optimization approach",
+      "How to present data to a skeptical client", "Market conditions affecting current strategy", "When to escalate a client situation",
+    ]},
   ],
   onboarding: [
-    "What do new clients most commonly misunderstand?",
-    "What sets up a client relationship for long-term success?",
-    "What should we accomplish in the first 30 days?",
-    "What are common onboarding mistakes to avoid?",
-    "How do we set revenue expectations without overpromising?",
+    { label: "ONBOARDING PROCESS AND SITUATIONS", items: [
+      "Step by step onboarding process", "How to pre-empt common onboarding objections",
+      "What to accomplish in the first 30 days", "How fee calculation is explained to new clients",
+      "What access to request and why", "How to handle a client who is impatient early", "Setting the right expectations at kickoff",
+    ]},
   ],
 };
 
@@ -1035,22 +1026,29 @@ ${context}`;
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
-              <div className="text-center py-12">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-4" style={{ width: 64, height: 64 }}>
+              <div className="text-center py-6">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }}>
                   <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
                   <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
                   <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
                 </svg>
-                <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
-                <p className="text-sm mb-8" style={{ color: "rgba(22,22,22,0.45)", maxWidth: 400, margin: "0 auto" }}>Ask me anything about Freewyld Foundry, revenue management, or the short-term rental industry.</p>
-                <div className="grid grid-cols-2 gap-2 text-left" style={{ maxWidth: 560, margin: "0 auto" }}>
-                  {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((q, i) => (
-                    <button key={i} onClick={() => sendMessage(q)} disabled={streaming} className="px-3 py-2.5 text-xs text-left transition-all"
-                      style={{ borderRadius: "10px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer", lineHeight: "1.4" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      {q}
-                    </button>
+                <h2 className="text-base font-semibold mb-1" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
+                <p className="text-xs mb-4" style={{ color: "rgba(22,22,22,0.4)", maxWidth: 360, margin: "0 auto" }}>Ask about Freewyld Foundry sales, clients, pricing, or processes.</p>
+                <div className="text-left" style={{ maxWidth: 600, margin: "0 auto" }}>
+                  {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((group, gi) => (
+                    <div key={gi} style={{ marginTop: gi > 0 ? 16 : 0 }}>
+                      <div style={{ fontSize: 11, letterSpacing: 2, color: "rgba(22,22,22,0.4)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase" }}>{group.label}</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {group.items.map((q, qi) => (
+                          <button key={qi} onClick={() => sendMessage(q)} disabled={streaming} className="px-3 py-2 text-xs text-left transition-all"
+                            style={{ borderRadius: "10px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer", lineHeight: "1.4" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
