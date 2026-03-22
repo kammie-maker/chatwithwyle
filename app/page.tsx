@@ -131,19 +131,26 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, expandedSections, expandSection, handleDraftAction, handleClarifyOption, clarifyInput, setClarifyInput }: {
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, inlineExpanded, expandLoading, onExpand, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
   text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode;
-  expandedSections: Record<number, Set<string>>; expandSection: (idx: number, key: string) => void;
-  handleDraftAction: (action: string) => void; handleClarifyOption: (opt: string) => void;
+  inlineExpanded: Record<string, string>; expandLoading: string | undefined;
+  onExpand: (section: string) => void; onDraft: (action: string) => void;
+  handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
   const parsed = parseResponse(text);
-  const visible = expandedSections[msgIdx] || new Set<string>();
-  const isFulfillment = chatMode === "fulfillment";
-  const defaultVisible = new Set(["SIMPLE"]);
-  if (isFulfillment) { defaultVisible.add("STRATEGY"); defaultVisible.add("PROBLEM"); defaultVisible.add("OPTIONS"); defaultVisible.add("RECOMMENDATION"); }
-  const allVisible = new Set([...defaultVisible, ...visible]);
-  const availableExpands = EXPAND_ORDER.filter(k => parsed.sections.some(s => s.key === k) && !allVisible.has(k));
+  const showPills = !isStreaming && (parsed.hasStructure || parsed.hadExpandToken);
+
+  // Clean content: strip "---" horizontal rules
+  function clean(s: string) { return s.replace(/^---+$/gm, "").trim(); }
+
+  // Get SIMPLE content (first section or entire text)
+  const simpleContent = clean(parsed.sections[0]?.content || text);
+
+  // Which sections are already expanded inline
+  const expandedKeys = Object.keys(inlineExpanded);
+  const allExpandKeys = ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+  const availablePills = allExpandKeys.filter(k => !expandedKeys.includes(k) && k !== expandLoading);
 
   return (
     <div className="flex gap-3 max-w-[85%]">
@@ -151,112 +158,100 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, expandedSection
         <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
       </div>
       <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0 }}>
-        {parsed.hasStructure ? (
-          <div className="px-4 py-3">
-            {parsed.sections.filter(s => allVisible.has(s.key)).map((s, si) => (
-              <div key={si} className={si > 0 ? "mt-3 pt-3" : ""} style={si > 0 ? { borderTop: "1px solid rgba(22,22,22,0.06)" } : undefined}>
-                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(22,22,22,0.35)" }}>{s.label}</div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap">{s.content}</div>
-              </div>
-            ))}
-            {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
+        <div className="px-4 py-3">
+          {/* SIMPLE / base content */}
+          <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
+          {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
 
-            {!isStreaming && availableExpands.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {availableExpands.map(k => (
-                  <button key={k} onClick={() => expandSection(msgIdx, k)} className="px-2.5 py-1 text-[11px] font-semibold transition-all"
+          {/* Inline expanded sections */}
+          {allExpandKeys.map(k => {
+            const content = inlineExpanded[k];
+            if (!content && k !== expandLoading) return null;
+            return (
+              <div key={k} className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }}>
+                <div className="text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-mustard)" }}>
+                  {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                </div>
+                {content ? (
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap">{clean(content)}</div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-mustard)" }}>
+                    <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+                    Loading...
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Expand pills */}
+          {showPills && availablePills.length > 0 && !expandLoading && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {availablePills.map(k => (
+                <button key={k} onClick={() => onExpand(k)}
+                  style={{ borderRadius: 20, background: "transparent", border: "1px solid #3c3b22", color: "#3c3b22", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  + {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Loading pill indicator */}
+          {expandLoading && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              <span style={{ borderRadius: 20, background: "rgba(60,59,34,0.08)", border: "1px solid #3c3b22", color: "rgba(60,59,34,0.4)", padding: "4px 14px", fontSize: 13 }}>
+                + {expandLoading === "INTERNAL FULL PICTURE" ? "INTERNAL" : expandLoading}...
+              </span>
+              {availablePills.filter(k => k !== expandLoading).map(k => (
+                <span key={k} style={{ borderRadius: 20, background: "transparent", border: "1px solid rgba(60,59,34,0.3)", color: "rgba(60,59,34,0.3)", padding: "4px 14px", fontSize: 13 }}>
+                  + {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {showPills && !expandLoading && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {MODE_ACTIONS[chatMode].map(action => (
+                <button key={action} onClick={() => onDraft(action)}
+                  style={{ borderRadius: 20, background: "transparent", border: "1px solid #663925", color: "#663925", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.08)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  {action}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Clarify block */}
+          {!isStreaming && parsed.clarify && (
+            <div className="mt-3 p-3 rounded-lg" style={{ borderLeft: "3px solid var(--color-olive)", background: "rgba(60,59,34,0.04)" }}>
+              <div className="text-xs font-semibold mb-1.5" style={{ color: "var(--color-olive)" }}>Clarification Needed</div>
+              <div className="text-xs mb-2">{parsed.clarify.question}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {parsed.clarify.options.map((opt, oi) => (
+                  <button key={oi} onClick={() => handleClarifyOption(opt)} className="px-2.5 py-1 text-[11px] font-medium transition-all"
                     style={{ borderRadius: "14px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer" }}
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    + {k}
+                    {opt}
                   </button>
                 ))}
-              </div>
-            )}
-
-            {!isStreaming && isFulfillment && parsed.sections.some(s => s.key === "ANSWER TO CLIENT") && !allVisible.has("ANSWER TO CLIENT") && (
-              <div className="mt-3">
-                <button onClick={() => expandSection(msgIdx, "ANSWER TO CLIENT")} className="px-2.5 py-1 text-[11px] font-semibold transition-all"
-                  style={{ borderRadius: "14px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  + ANSWER TO CLIENT
-                </button>
-              </div>
-            )}
-
-            {!isStreaming && (
-              <div className="flex flex-wrap gap-1.5 mt-3 pt-3" style={{ borderTop: "1px solid rgba(22,22,22,0.06)" }}>
-                {MODE_ACTIONS[chatMode].map(action => (
-                  <button key={action} onClick={() => handleDraftAction(action)} className="px-2.5 py-1 text-[11px] font-semibold transition-all"
-                    style={{ borderRadius: "6px", background: "transparent", border: "1px solid var(--color-bark)", color: "var(--color-bark)", cursor: "pointer" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.08)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    {action}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!isStreaming && parsed.clarify && (
-              <div className="mt-3 p-3 rounded-lg" style={{ borderLeft: "3px solid var(--color-olive)", background: "rgba(60,59,34,0.04)" }}>
-                <div className="text-xs font-semibold mb-1.5" style={{ color: "var(--color-olive)" }}>Clarification Needed</div>
-                <div className="text-xs mb-2" style={{ color: "var(--color-onyx)" }}>{parsed.clarify.question}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {parsed.clarify.options.map((opt, oi) => (
-                    <button key={oi} onClick={() => handleClarifyOption(opt)} className="px-2.5 py-1 text-[11px] font-medium transition-all"
-                      style={{ borderRadius: "14px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      {opt}
-                    </button>
-                  ))}
-                  <div className="flex gap-1 w-full mt-1">
-                    <input className="flex-1 px-2 py-1 text-[11px] focus:outline-none" placeholder="Custom answer..."
-                      style={{ borderRadius: "6px", border: "1px solid rgba(22,22,22,0.1)", background: "var(--color-cream)", color: "var(--color-onyx)" }}
-                      value={clarifyInput} onChange={e => setClarifyInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter" && clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} />
-                    <button onClick={() => { if (clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} className="px-2 py-1 text-[11px] font-semibold"
-                      style={{ borderRadius: "6px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>Send</button>
-                  </div>
+                <div className="flex gap-1 w-full mt-1">
+                  <input className="flex-1 px-2 py-1 text-[11px] focus:outline-none" placeholder="Custom answer..."
+                    style={{ borderRadius: "6px", border: "1px solid rgba(22,22,22,0.1)", background: "var(--color-cream)", color: "var(--color-onyx)" }}
+                    value={clarifyInput} onChange={e => setClarifyInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} />
+                  <button onClick={() => { if (clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} className="px-2 py-1 text-[11px] font-semibold"
+                    style={{ borderRadius: "6px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>Send</button>
                 </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="px-4 py-3">
-            <div className="text-sm leading-relaxed whitespace-pre-wrap">
-              {parsed.sections[0]?.content || text}
-              {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
             </div>
-            {/* Show expand pills even without structure if [[EXPAND_PROMPT]] was present */}
-            {!isStreaming && parsed.hadExpandToken && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {["DEEPER", "DEEPEST", "INTERNAL"].map(k => (
-                  <button key={k} onClick={() => handleDraftAction(`Show me the ${k} section`)}
-                    style={{ borderRadius: 20, background: "transparent", border: "1px solid #3c3b22", color: "#3c3b22", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    + {k}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Action buttons */}
-            {!isStreaming && parsed.hadExpandToken && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {MODE_ACTIONS[chatMode].map(action => (
-                  <button key={action} onClick={() => handleDraftAction(action)}
-                    style={{ borderRadius: 20, background: "transparent", border: "1px solid #663925", color: "#663925", padding: "4px 14px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.08)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    {action}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -287,8 +282,9 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
-  // Per-message expand state: msgIndex -> set of visible section keys
-  const [expandedSections, setExpandedSections] = useState<Record<number, Set<string>>>({});
+  // Per-message inline expanded sections: msgIndex -> { sectionKey: content }
+  const [inlineExpanded, setInlineExpanded] = useState<Record<number, Record<string, string>>>({});
+  const [expandLoading, setExpandLoading] = useState<Record<number, string>>({}); // msgIndex -> currently loading section key
   const [clarifyInput, setClarifyInput] = useState("");
   const [kbFiles, setKbFiles] = useState<KbFile[]>([]);
   const [kbFilesLoading, setKbFilesLoading] = useState(false);
@@ -343,21 +339,80 @@ export default function Home() {
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
   function removePendingFile(index: number) { setPendingFiles(prev => prev.filter((_, i) => i !== index)); }
-  function clearConversation() { setMessages([]); setExpandedSections({}); }
+  function clearConversation() { setMessages([]); setInlineExpanded({}); setExpandLoading({}); }
 
-  function expandSection(msgIdx: number, sectionKey: string) {
-    setExpandedSections(prev => {
-      const current = new Set(prev[msgIdx] || []);
-      // Enforce order: can't show DEEPEST without DEEPER
-      if (sectionKey === "DEEPEST" && !current.has("DEEPER")) { current.add("DEEPER"); }
-      if (sectionKey === "INTERNAL FULL PICTURE") { if (!current.has("DEEPER")) current.add("DEEPER"); if (!current.has("DEEPEST")) current.add("DEEPEST"); }
-      current.add(sectionKey);
-      return { ...prev, [msgIdx]: current };
-    });
+  async function expandSectionInline(msgIdx: number, sectionKey: string) {
+    if (expandLoading[msgIdx]) return; // already loading something for this msg
+
+    // Find the original user question and assistant response for context
+    const assistantMsg = messages[msgIdx];
+    const userMsg = msgIdx > 0 ? messages[msgIdx - 1] : null;
+    if (!assistantMsg || !userMsg) return;
+
+    setExpandLoading(prev => ({ ...prev, [msgIdx]: sectionKey }));
+
+    try {
+      const contextMessages = [
+        { role: userMsg.role, content: userMsg.content },
+        { role: assistantMsg.role, content: assistantMsg.content },
+        { role: "user", content: `Give me only the ${sectionKey} section. No SIMPLE section. Start directly with the ## ${sectionKey} header.` }
+      ];
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: contextMessages, mode: chatMode }),
+      });
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        // Update inline expanded in real time
+        setInlineExpanded(prev => ({
+          ...prev,
+          [msgIdx]: { ...(prev[msgIdx] || {}), [sectionKey]: fullText }
+        }));
+      }
+
+      // Clean up final text
+      fullText = fullText.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/^---+$/gm, "").trim();
+      // Strip the section header if Claude included it
+      fullText = fullText.replace(new RegExp("^#{2,4}\\s+" + sectionKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\n?", "i"), "").trim();
+
+      setInlineExpanded(prev => ({
+        ...prev,
+        [msgIdx]: { ...(prev[msgIdx] || {}), [sectionKey]: fullText }
+      }));
+    } catch {
+      setToast("Failed to load " + sectionKey);
+      setInlineExpanded(prev => {
+        const copy = { ...prev };
+        if (copy[msgIdx]) delete copy[msgIdx][sectionKey];
+        return copy;
+      });
+    } finally {
+      setExpandLoading(prev => { const copy = { ...prev }; delete copy[msgIdx]; return copy; });
+    }
   }
 
-  function handleDraftAction(action: string) {
-    sendMessage(`Draft a ${action.toLowerCase()} based on everything visible so far in this response.`);
+  function handleDraftAction(msgIdx: number) {
+    // Build context from all visible sections for this message
+    const msg = messages[msgIdx];
+    if (!msg) return;
+    const baseText = typeof msg.content === "string" ? msg.content : "";
+    const expanded = inlineExpanded[msgIdx] || {};
+    const allContent = [baseText, ...Object.values(expanded)].join("\n\n");
+    return allContent;
+  }
+
+  function sendDraftAction(action: string, msgIdx: number) {
+    const context = handleDraftAction(msgIdx);
+    sendMessage(`Draft a ${action.toLowerCase()} based on this response:\n\n${context}`);
   }
 
   function handleClarifyOption(option: string) {
@@ -485,7 +540,9 @@ export default function Home() {
                 <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
-                      expandedSections={expandedSections} expandSection={expandSection} handleDraftAction={handleDraftAction}
+                      inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]}
+                      onExpand={(section) => expandSectionInline(i, section)}
+                      onDraft={(action) => sendDraftAction(action, i)}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
                     <div className="inline-block max-w-[80%] text-sm" style={{ background: "var(--color-bark)", borderRadius: "16px 16px 4px 16px", color: "var(--color-cream)", padding: hasMedia ? "0.5rem" : undefined }}>
