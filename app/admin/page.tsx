@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 interface User {
   email: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   role: "admin" | "standard";
   status: "active" | "suspended" | "pending";
   lastLogin: string | null;
@@ -15,6 +17,19 @@ interface User {
   sessionRevokedAt?: string | null;
   defaultMode?: string;
   defaultInteraction?: string;
+}
+
+function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v: string) => void; placeholder?: string }) {
+  const [editing, setEditing] = React.useState(false);
+  const [text, setText] = React.useState(value);
+  React.useEffect(() => setText(value), [value]);
+  if (editing) {
+    return <input autoFocus value={text} onChange={e => setText(e.target.value)} placeholder={placeholder}
+      onBlur={() => { setEditing(false); if (text !== value) onSave(text); }}
+      onKeyDown={e => { if (e.key === "Enter") { setEditing(false); if (text !== value) onSave(text); } if (e.key === "Escape") { setEditing(false); setText(value); } }}
+      style={{ fontSize: 13, padding: "1px 4px", borderRadius: 4, border: "1px solid var(--color-mustard)", background: "var(--color-cream)", color: "var(--color-onyx)", width: "100%", outline: "none" }} />;
+  }
+  return <span onClick={() => setEditing(true)} style={{ cursor: "pointer", borderBottom: "1px dashed rgba(22,22,22,0.2)" }}>{value || <span style={{ color: "rgba(22,22,22,0.3)" }}>{placeholder}</span>}</span>;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
@@ -31,7 +46,8 @@ export default function AdminPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteName, setInviteName] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
   const [inviteRole, setInviteRole] = useState<"standard" | "admin">("standard");
   const [inviteMode, setInviteMode] = useState("sales");
   const [inviteInteraction, setInviteInteraction] = useState("client");
@@ -56,7 +72,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/users", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...updates }) });
       const data = await res.json();
       if (data.error) { setToast(data.error); return; }
-      const msg = updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : updates.defaultMode || updates.defaultInteraction ? "Preferences updated" : "User updated";
+      const msg = updates.action === "suspend" ? "User suspended" : updates.action === "unsuspend" ? "User unsuspended" : updates.action === "revoke_sessions" ? `Sessions revoked for ${email}` : updates.firstName !== undefined || updates.lastName !== undefined ? "Name updated" : updates.defaultMode || updates.defaultInteraction ? "Preferences updated" : "User updated";
       setToast(msg);
       loadUsers();
     } catch { setToast("Update failed"); }
@@ -86,11 +102,11 @@ export default function AdminPage() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, name: inviteName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) });
+      const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, firstName: inviteFirstName.trim(), lastName: inviteLastName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) });
       const data = await res.json();
       if (data.error) { setToast(data.error); setInviting(false); return; }
       setToast("Invitation sent to " + inviteEmail.trim());
-      setInviteEmail(""); setInviteName(""); setShowInvite(false);
+      setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); setShowInvite(false);
       loadUsers();
     } catch { setToast("Invite failed"); }
     finally { setInviting(false); }
@@ -148,10 +164,10 @@ export default function AdminPage() {
 
         {/* Active users table */}
         <div style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden" }}>
-          <div className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)", minWidth: 1050 }}>
-            {["Name", "Email", "Role", "Status", "Mode", "Type", "Last Login", "Actions"].map((h, i) => {
-              const widths = ["0 0 140px", "0 0 180px", "0 0 100px", "0 0 90px", "0 0 130px", "0 0 110px", "0 0 110px"];
-              return <div key={h} style={{ flex: i === 7 ? 1 : widths[i], fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: i === 7 ? "right" : "left" }}>{h}</div>;
+          <div className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)", minWidth: 1100 }}>
+            {["First", "Last", "Email", "Role", "Status", "Mode", "Type", "Login", "Actions"].map((h, i) => {
+              const widths = ["0 0 100px", "0 0 100px", "0 0 180px", "0 0 90px", "0 0 85px", "0 0 120px", "0 0 95px", "0 0 90px"];
+              return <div key={h} style={{ flex: i === 8 ? 1 : widths[i], fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: i === 8 ? "right" : "left" }}>{h}</div>;
             })}
           </div>
 
@@ -163,22 +179,27 @@ export default function AdminPage() {
             activeUsers.map(user => {
               const st = STATUS_STYLES[user.status] || STATUS_STYLES.active;
               return (
-                <div key={user.email} className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)", minWidth: 1050 }}>
-                  <div style={{ flex: "0 0 140px", fontSize: 14, fontWeight: 500, color: "var(--color-onyx)" }}>{user.name}</div>
-                  <div style={{ flex: "0 0 180px", fontSize: 13, color: "rgba(22,22,22,0.6)" }}>{user.email}</div>
-                  <div style={{ flex: "0 0 100px" }}>
+                <div key={user.email} className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)", minWidth: 1100 }}>
+                  <div style={{ flex: "0 0 100px", fontSize: 13, fontWeight: 500, color: "var(--color-onyx)" }}>
+                    <InlineEdit value={user.firstName || ""} placeholder="First" onSave={v => updateUser(user.email, { firstName: v })} />
+                  </div>
+                  <div style={{ flex: "0 0 100px", fontSize: 13, fontWeight: 500, color: "var(--color-onyx)" }}>
+                    <InlineEdit value={user.lastName || ""} placeholder="Last" onSave={v => updateUser(user.email, { lastName: v })} />
+                  </div>
+                  <div style={{ flex: "0 0 180px", fontSize: 12, color: "rgba(22,22,22,0.6)" }}>{user.email}</div>
+                  <div style={{ flex: "0 0 90px" }}>
                     <select value={user.role} onChange={e => updateUser(user.email, { role: e.target.value })}
                       style={{ fontSize: 11, padding: "2px 6px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
                       <option value="standard">Standard</option>
                       <option value="admin">Admin</option>
                     </select>
                   </div>
-                  <div style={{ flex: "0 0 90px" }}>
-                    <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, fontWeight: 600, background: st.bg, color: st.color }}>
+                  <div style={{ flex: "0 0 85px" }}>
+                    <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 600, background: st.bg, color: st.color }}>
                       {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                     </span>
                   </div>
-                  <div style={{ flex: "0 0 130px" }}>
+                  <div style={{ flex: "0 0 120px" }}>
                     <select value={user.defaultMode || "sales"} onChange={e => updateUser(user.email, { defaultMode: e.target.value })}
                       style={{ fontSize: 11, padding: "2px 4px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
                       <option value="sales">Sales</option>
@@ -187,14 +208,14 @@ export default function AdminPage() {
                       <option value="onboarding">Onboarding</option>
                     </select>
                   </div>
-                  <div style={{ flex: "0 0 110px" }}>
+                  <div style={{ flex: "0 0 95px" }}>
                     <select value={user.defaultInteraction || "client"} onChange={e => updateUser(user.email, { defaultInteraction: e.target.value })}
                       style={{ fontSize: 11, padding: "2px 4px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", color: "var(--color-onyx)", cursor: "pointer" }}>
                       <option value="client">Client</option>
                       <option value="research">Research</option>
                     </select>
                   </div>
-                  <div style={{ flex: "0 0 110px", fontSize: 12, color: "rgba(22,22,22,0.45)" }}>
+                  <div style={{ flex: "0 0 90px", fontSize: 11, color: "rgba(22,22,22,0.45)" }}>
                     {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Never"}
                   </div>
                   <div style={{ flex: 1, textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -274,11 +295,18 @@ export default function AdminPage() {
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-4" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Invite Team Member</h3>
-            <input value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Full name"
-              className="w-full px-4 py-3 text-sm mb-3 focus:outline-none"
-              style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)" }}
-              onFocus={e => e.currentTarget.style.borderColor = "var(--color-mustard)"}
-              onBlur={e => e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"} />
+            <div className="flex gap-2 mb-3">
+              <input value={inviteFirstName} onChange={e => setInviteFirstName(e.target.value)} placeholder="First name"
+                className="flex-1 px-4 py-3 text-sm focus:outline-none"
+                style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)" }}
+                onFocus={e => e.currentTarget.style.borderColor = "var(--color-mustard)"}
+                onBlur={e => e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"} />
+              <input value={inviteLastName} onChange={e => setInviteLastName(e.target.value)} placeholder="Last name"
+                className="flex-1 px-4 py-3 text-sm focus:outline-none"
+                style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)" }}
+                onFocus={e => e.currentTarget.style.borderColor = "var(--color-mustard)"}
+                onBlur={e => e.currentTarget.style.borderColor = "rgba(22,22,22,0.1)"} />
+            </div>
             <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@freewyld.com"
               className="w-full px-4 py-3 text-sm mb-3 focus:outline-none"
               style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)", color: "var(--color-onyx)" }}
@@ -313,7 +341,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteName(""); }}
+              <button onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); }}
                 style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>
                 Cancel
               </button>

@@ -74,6 +74,8 @@ async function saveUsersToDrive(users: Record<string, UserRecord>): Promise<bool
 interface UserRecord {
   email: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   role: "admin" | "standard";
   status: "active" | "suspended" | "pending";
   lastLogin: string | null;
@@ -85,8 +87,8 @@ interface UserRecord {
 }
 
 const SEED_ADMINS = [
-  { email: "kammie@freewyld.com", name: "Kammie" },
-  { email: "eric@freewyld.com", name: "Eric" },
+  { email: "kammie@freewyld.com", name: "Kammie Melton", firstName: "Kammie", lastName: "Melton" },
+  { email: "eric@freewyld.com", name: "Eric Moeller", firstName: "Eric", lastName: "Moeller" },
 ];
 
 async function ensureAdminsSeed(users: Record<string, UserRecord>): Promise<boolean> {
@@ -96,6 +98,8 @@ async function ensureAdminsSeed(users: Record<string, UserRecord>): Promise<bool
       users[admin.email] = {
         email: admin.email,
         name: admin.name,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
         role: "admin",
         status: "active",
         lastLogin: null,
@@ -116,7 +120,19 @@ export async function GET() {
 
   const users = await fetchUsersFromDrive();
   const seeded = await ensureAdminsSeed(users);
-  if (seeded) await saveUsersToDrive(users);
+
+  // Migrate: backfill firstName/lastName from name if missing
+  let migrated = false;
+  for (const key in users) {
+    if (!users[key].firstName && users[key].name) {
+      const parts = users[key].name.split(" ");
+      users[key].firstName = parts[0] || "";
+      users[key].lastName = parts.slice(1).join(" ") || "";
+      migrated = true;
+    }
+  }
+
+  if (seeded || migrated) await saveUsersToDrive(users);
 
   return Response.json({ users: Object.values(users) });
 }
@@ -128,7 +144,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role = "standard", name = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
+  const { email, role = "standard", name = "", firstName = "", lastName = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
   if (!email?.endsWith("@freewyld.com")) {
     return Response.json({ error: "Only @freewyld.com emails allowed" }, { status: 400 });
   }
@@ -139,9 +155,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "User already exists" }, { status: 409 });
   }
 
+  const fn = firstName || name || key.split("@")[0];
+  const ln = lastName || "";
   users[key] = {
     email: key,
-    name: name || key.split("@")[0],
+    name: [fn, ln].join(" ").trim(),
+    firstName: fn,
+    lastName: ln,
     role: role as "admin" | "standard",
     status: "pending",
     lastLogin: null,
@@ -161,7 +181,7 @@ export async function PUT(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role, action, defaultMode, defaultInteraction } = await req.json();
+  const { email, role, action, defaultMode, defaultInteraction, firstName, lastName } = await req.json();
   if (!email) return Response.json({ error: "email required" }, { status: 400 });
 
   const users = await fetchUsersFromDrive();
@@ -173,6 +193,8 @@ export async function PUT(req: Request) {
   if (role) users[key].role = role;
   if (defaultMode) users[key].defaultMode = defaultMode;
   if (defaultInteraction) users[key].defaultInteraction = defaultInteraction;
+  if (firstName !== undefined) { users[key].firstName = firstName; users[key].name = [firstName, users[key].lastName || ""].join(" ").trim(); }
+  if (lastName !== undefined) { users[key].lastName = lastName; users[key].name = [users[key].firstName || "", lastName].join(" ").trim(); }
 
   if (action === "suspend") {
     users[key].status = "suspended";
