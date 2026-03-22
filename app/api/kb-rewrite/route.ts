@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
 
 // Allow up to 5 minutes for the rewrite
 export const maxDuration = 300;
@@ -23,22 +23,16 @@ Return only the compiled knowledge base document. No preamble, no explanation.`;
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { password, trigger = "manual" } = body as { password?: string; trigger?: string };
+    const { trigger = "manual" } = body as { trigger?: string };
 
-    // Auth: accept cron bearer token, password in body, or auth cookie
+    // Auth: accept cron bearer token or NextAuth session
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
     const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
     if (!isCron) {
-      const correctPassword = process.env.WYLE_PASSWORD;
-      if (!correctPassword) return Response.json({ error: "Password not configured" }, { status: 500 });
-
-      const cookieStore = await cookies();
-      const authCookie = cookieStore.get("wyle_auth");
-      const isAuthed = authCookie?.value === "1" || password === correctPassword;
-
-      if (!isAuthed) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const session = await getServerSession();
+      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const effectiveTrigger = isCron ? "auto" : trigger;

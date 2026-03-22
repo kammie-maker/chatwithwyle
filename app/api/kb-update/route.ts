@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
 
 // Reference to the KB cache in /api/chat — we'll export a cache-bust timestamp
 // that /api/chat checks on each request
@@ -8,20 +8,10 @@ export function getLastKbUpdate() { return lastKbUpdate; }
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { text, password } = body;
+    const { text } = body;
 
-    // Auth: verify password
-    const correctPassword = process.env.WYLE_PASSWORD;
-    if (!correctPassword) return Response.json({ error: "Password not configured" }, { status: 500 });
-
-    // Accept either password in body or auth cookie
-    const cookieStore = await cookies();
-    const authCookie = cookieStore.get("wyle_auth");
-    const isAuthed = authCookie?.value === "1" || password === correctPassword;
-
-    if (!isAuthed) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession();
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return Response.json({ error: "text is required" }, { status: 400 });

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
 
 export const maxDuration = 120;
 
@@ -12,11 +12,8 @@ Mark changes using ONLY these tokens:
 Return the complete document with change markers. No preamble. No explanation. No code fences. Just the document with markers.`;
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const auth = cookieStore.get("wyle_auth");
-  if (auth?.value !== "1") {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = await getServerSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });

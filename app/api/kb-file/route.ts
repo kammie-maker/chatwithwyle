@@ -1,12 +1,9 @@
-import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
 
 export async function GET(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const authCookie = cookieStore.get("wyle_auth");
-    if (authCookie?.value !== "1") {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession();
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get("fileId");
@@ -41,11 +38,8 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const authCookie = cookieStore.get("wyle_auth");
-    if (authCookie?.value !== "1") {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession();
+    if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const { fileId, content } = body;

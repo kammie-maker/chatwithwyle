@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useSession, signOut } from "next-auth/react";
 
 type ContentBlock =
   | { type: "text"; text: string }
@@ -332,10 +333,7 @@ function renderDiff(raw: string): string {
 }
 
 export default function Home() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authLoading, setAuthLoading] = useState(false);
+  const { status } = useSession();
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [chatMode, setChatMode] = useState<ChatMode>("sales");
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("client");
@@ -376,9 +374,9 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  useEffect(() => { fetch("/api/auth").then(r => r.json()).then(j => setAuthenticated(j.authenticated)).catch(() => setAuthenticated(false)); }, []);
+  // Auth handled by NextAuth middleware — no manual check needed
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-  useEffect(() => { if (activeTab === "kb" && authenticated) { loadKbFiles(); loadLog(); } }, [activeTab, authenticated]);
+  useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
   useEffect(() => {
     function handleClick(e: MouseEvent) { if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false); }
     if (modeDropdownOpen) document.addEventListener("mousedown", handleClick);
@@ -387,12 +385,6 @@ export default function Home() {
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
   function switchMode(mode: ChatMode) { if (mode === chatMode) { setModeDropdownOpen(false); return; } setChatMode(mode); setMessages([]); setInput(""); setPendingFiles([]); setModeDropdownOpen(false); setToast(`Switched to ${MODE_LABELS[mode]}`); }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault(); setAuthLoading(true); setAuthError("");
-    try { const res = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) }); if (res.ok) setAuthenticated(true); else setAuthError("Incorrect password"); }
-    catch { setAuthError("Connection error"); } finally { setAuthLoading(false); }
-  }
 
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
@@ -518,39 +510,10 @@ export default function Home() {
   async function triggerRewrite() { setRewriting(true); setConfirmRewrite(false); setForceRewriteConfirm(false); setKbAddConfirmRewrite(false); try { const res = await fetch("/api/kb-rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "", trigger: "manual" }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setToast("Rewrite complete"); loadLog(); } catch { setToast("Rewrite failed"); } finally { setRewriting(false); } }
   async function handleAddToKb() { if (!kbAddText.trim() || kbAdding) return; setKbAdding(true); try { const res = await fetch("/api/kb-update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: kbAddText.trim() }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setKbAddText(""); setToast("Added to knowledge base"); setKbAddConfirmRewrite(true); } catch { setToast("Failed to add to knowledge base"); } finally { setKbAdding(false); } }
 
-  // ── Loading ──
-  if (authenticated === null) return (
+  // ── Loading (session check) ──
+  if (status === "loading") return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--color-onyx)" }}>
       <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
-    </div>
-  );
-
-  // ── Password gate ──
-  if (!authenticated) return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--color-onyx)" }}>
-      <form onSubmit={handleLogin} className="w-full max-w-sm text-center" style={{
-        background: "rgba(60,59,34,0.3)", borderRadius: "16px", padding: "2.5rem 2rem",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.3)", border: "1px solid rgba(237,233,225,0.15)",
-      }}>
-        <div className="w-14 h-14 mx-auto mb-4 flex items-center justify-center" style={{ background: "var(--color-mustard)", borderRadius: "12px" }}>
-          <svg fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={2} className="w-7 h-7">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-semibold mb-1" style={{ fontFamily: "var(--font-heading)", color: "var(--color-cream)" }}>Wyle</h1>
-        <p className="text-sm mb-6" style={{ color: "var(--color-mustard)", fontFamily: "var(--font-body)" }}>Freewyld Foundry AI Assistant</p>
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" autoFocus
-          className="w-full px-4 py-3 text-sm mb-3 focus:outline-none transition-all"
-          style={{ borderRadius: "10px", background: "rgba(22,22,22,0.6)", border: "1px solid rgba(237,233,225,0.2)", color: "var(--color-cream)", fontFamily: "var(--font-body)" }}
-          onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.25)"; }}
-          onBlur={e => { e.currentTarget.style.borderColor = "rgba(237,233,225,0.2)"; e.currentTarget.style.boxShadow = "none"; }}
-        />
-        {authError && <p className="text-sm mb-3" style={{ color: "#e57373" }}>{authError}</p>}
-        <button type="submit" disabled={authLoading || !password} className="w-full py-3 text-sm font-semibold disabled:opacity-50 transition-all"
-          style={{ borderRadius: "10px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", fontFamily: "var(--font-body)", cursor: "pointer" }}>
-          {authLoading ? "Checking\u2026" : "Enter"}
-        </button>
-      </form>
     </div>
   );
 
@@ -585,6 +548,12 @@ export default function Home() {
               Clear
             </button>
           )}
+          <button onClick={() => signOut()} className="text-xs font-medium px-3 py-1.5 transition-all"
+            style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(237,233,225,0.35)", fontFamily: "var(--font-body)", cursor: "pointer" }}
+            onMouseEnter={e => { e.currentTarget.style.color = "rgba(237,233,225,0.6)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "rgba(237,233,225,0.35)"; }}>
+            Sign out
+          </button>
         </div>
       </header>
 

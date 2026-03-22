@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
 import { getLastKbUpdate } from "../kb-update/route";
 import { getLastRewrite } from "../kb-rewrite/route";
 import { fetchAgentFiles } from "../kb-agents/route";
@@ -119,9 +119,8 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
 }
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const auth = cookieStore.get("wyle_auth");
-  if (auth?.value !== "1") return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!process.env.ANTHROPIC_API_KEY) return Response.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
 
   try {
