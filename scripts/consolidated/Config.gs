@@ -98,10 +98,11 @@ function getApiKey() {
 
 function setupAllTriggers() {
   var functions = [
+    "processNewSalesTranscripts",
+    "weeklyPodcastSync",
     "buildInsightDocs",
     "buildKnowledgeBase",
-    "processNewSalesTranscripts",
-    "weeklyPodcastSync"
+    "weeklyAgentUpdate"
   ];
 
   var triggers = ScriptApp.getProjectTriggers();
@@ -112,18 +113,28 @@ function setupAllTriggers() {
   }
 
   // Monday pipeline sequence (UTC)
-  ScriptApp.newTrigger("buildInsightDocs")
+  // 8 UTC = 1:00 AM PDT
+  ScriptApp.newTrigger("processNewSalesTranscripts")
     .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(8).create();
 
-  ScriptApp.newTrigger("buildKnowledgeBase")
+  // 9 UTC = 2:00 AM PDT
+  ScriptApp.newTrigger("weeklyPodcastSync")
     .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).create();
 
-  ScriptApp.newTrigger("processNewSalesTranscripts")
+  // 10 UTC = 3:00 AM PDT
+  ScriptApp.newTrigger("buildInsightDocs")
     .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(10).create();
 
-  ScriptApp.newTrigger("weeklyPodcastSync")
+  // 11 UTC = 4:00 AM PDT
+  ScriptApp.newTrigger("buildKnowledgeBase")
     .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(11).create();
 
-  Logger.log("All triggers set. Pipeline runs Mondays 1-4 AM PDT (8-11 UTC).");
+  // 12 UTC = 5:00 AM PDT
+  ScriptApp.newTrigger("weeklyAgentUpdate")
+    .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(12).create();
+
+  // 13 UTC = 6:00 AM PDT — KB rewrite via Vercel cron (no Apps Script trigger)
+
+  Logger.log("All triggers set. Monday pipeline 1-5 AM PDT (8-12 UTC).");
   Logger.log("KB rewrite runs via Vercel cron Monday 13:00 UTC (6:00 AM PDT).");
 }
