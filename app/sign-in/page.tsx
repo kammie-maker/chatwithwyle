@@ -27,7 +27,9 @@ function SignInContent() {
             {error === "AccessDenied"
               ? "Access restricted to Freewyld team members (@freewyld.com)"
               : error === "Suspended"
-              ? "Your account has been suspended. Contact your admin."
+              ? "Your Wyle access has been suspended. Contact your admin."
+              : error === "NoAccess"
+              ? "You don't have access to Wyle yet. Contact your admin to get set up."
               : "Sign in failed. Please try again."}
           </div>
         )}

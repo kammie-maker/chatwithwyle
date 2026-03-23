@@ -1,75 +1,6 @@
+import { sql } from "@vercel/postgres";
 import { getServerSession } from "next-auth";
 import { getAuthOptions, isAdmin } from "../../auth/[...nextauth]/auth-options";
-
-const USERS_FILE = "Wyle-Users.json";
-
-async function fetchUsersFromDrive(): Promise<Record<string, UserRecord>> {
-  const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
-  const password = process.env.WYLE_PASSWORD;
-  if (!webhookUrl || !password) return {};
-
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "list_files", password }),
-      redirect: "follow",
-    });
-    const data = await res.json();
-    const file = (data.files || []).find((f: { name: string }) => f.name === USERS_FILE);
-    if (!file) return {};
-
-    const fileRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_file", fileId: file.id, password }),
-      redirect: "follow",
-    });
-    const fileData = await fileRes.json();
-    return JSON.parse(fileData.content || "{}");
-  } catch {
-    return {};
-  }
-}
-
-async function saveUsersToDrive(users: Record<string, UserRecord>): Promise<boolean> {
-  const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
-  const password = process.env.WYLE_PASSWORD;
-  if (!webhookUrl || !password) return false;
-
-  try {
-    // Find existing file
-    const listRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "list_files", password }),
-      redirect: "follow",
-    });
-    const listData = await listRes.json();
-    const file = (listData.files || []).find((f: { name: string }) => f.name === USERS_FILE);
-
-    const content = JSON.stringify(users, null, 2);
-
-    if (file) {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_file", fileId: file.id, content, password }),
-        redirect: "follow",
-      });
-    } else {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_file", fileName: USERS_FILE, content, password }),
-        redirect: "follow",
-      });
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 interface UserRecord {
   email: string;
@@ -80,35 +11,38 @@ interface UserRecord {
   status: "active" | "suspended" | "pending";
   lastLogin: string | null;
   createdAt: string;
-  suspendedAt?: string | null;
-  sessionRevokedAt?: string | null;
   defaultMode?: string;
   defaultInteraction?: string;
 }
 
 const SEED_ADMINS = [
-  { email: "kammie@freewyld.com", name: "Kammie Melton", firstName: "Kammie", lastName: "Melton" },
-  { email: "eric@freewyld.com", name: "Eric Moeller", firstName: "Eric", lastName: "Moeller" },
+  { email: "kammie@freewyld.com", firstName: "Kammie", lastName: "Melton" },
+  { email: "eric@freewyld.com", firstName: "Eric", lastName: "Moeller" },
 ];
 
-async function ensureAdminsSeed(users: Record<string, UserRecord>): Promise<boolean> {
-  let changed = false;
+async function ensureAdminsSeed() {
   for (const admin of SEED_ADMINS) {
-    if (!users[admin.email]) {
-      users[admin.email] = {
-        email: admin.email,
-        name: admin.name,
-        firstName: admin.firstName,
-        lastName: admin.lastName,
-        role: "admin",
-        status: "active",
-        lastLogin: null,
-        createdAt: new Date().toISOString(),
-      };
-      changed = true;
-    }
+    await sql`
+      INSERT INTO users (email, first_name, last_name, role, status)
+      VALUES (${admin.email}, ${admin.firstName}, ${admin.lastName}, 'admin', 'active')
+      ON CONFLICT (email) DO NOTHING
+    `;
   }
-  return changed;
+}
+
+function rowToUser(row: Record<string, unknown>): UserRecord {
+  return {
+    email: row.email as string,
+    name: [row.first_name || "", row.last_name || ""].join(" ").trim(),
+    firstName: (row.first_name as string) || undefined,
+    lastName: (row.last_name as string) || undefined,
+    role: row.role as UserRecord["role"],
+    status: row.status as UserRecord["status"],
+    lastLogin: row.last_login ? (row.last_login as Date).toISOString() : null,
+    createdAt: row.created_at ? (row.created_at as Date).toISOString() : new Date().toISOString(),
+    defaultMode: (row.default_mode as string) || undefined,
+    defaultInteraction: (row.default_interaction as string) || undefined,
+  };
 }
 
 // GET: list all users
@@ -118,64 +52,39 @@ export async function GET() {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const users = await fetchUsersFromDrive();
-  const seeded = await ensureAdminsSeed(users);
-
-  // Migrate: backfill firstName/lastName from name if missing, rename "standard" role to "user"
-  let migrated = false;
-  for (const key in users) {
-    if (!users[key].firstName && users[key].name) {
-      const parts = users[key].name.split(" ");
-      users[key].firstName = parts[0] || "";
-      users[key].lastName = parts.slice(1).join(" ") || "";
-      migrated = true;
-    }
-    if ((users[key].role as string) === "standard") {
-      users[key].role = "user";
-      migrated = true;
-    }
-  }
-
-  if (seeded || migrated) await saveUsersToDrive(users);
-
-  return Response.json({ users: Object.values(users) });
+  await ensureAdminsSeed();
+  const { rows } = await sql`SELECT * FROM users ORDER BY created_at ASC`;
+  const users = rows.map(rowToUser);
+  return Response.json({ users });
 }
 
-// POST: create/invite user
+// POST: create/add user
 export async function POST(req: Request) {
   const session = await getServerSession(getAuthOptions());
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role = "user", name = "", firstName = "", lastName = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
+  const { email, role = "user", firstName = "", lastName = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
   if (!email?.endsWith("@freewyld.com")) {
     return Response.json({ error: "Only @freewyld.com emails allowed" }, { status: 400 });
   }
 
-  const users = await fetchUsersFromDrive();
   const key = email.toLowerCase();
-  if (users[key]) {
+  const { rows: existing } = await sql`SELECT email FROM users WHERE email = ${key}`;
+  if (existing.length > 0) {
     return Response.json({ error: "User already exists" }, { status: 409 });
   }
 
-  const fn = firstName || name || key.split("@")[0];
+  const fn = firstName || key.split("@")[0];
   const ln = lastName || "";
-  users[key] = {
-    email: key,
-    name: [fn, ln].join(" ").trim(),
-    firstName: fn,
-    lastName: ln,
-    role: role as "admin" | "knowledge_manager" | "user",
-    status: "pending",
-    lastLogin: null,
-    createdAt: new Date().toISOString(),
-    defaultMode,
-    defaultInteraction,
-  };
+  await sql`
+    INSERT INTO users (email, first_name, last_name, role, status, default_mode, default_interaction)
+    VALUES (${key}, ${fn}, ${ln}, ${role}, 'pending', ${defaultMode}, ${defaultInteraction})
+  `;
 
-  await saveUsersToDrive(users);
-  return Response.json({ success: true, user: users[key] });
+  const { rows } = await sql`SELECT * FROM users WHERE email = ${key}`;
+  return Response.json({ success: true, user: rowToUser(rows[0]) });
 }
 
 // PUT: update user role/status
@@ -188,41 +97,35 @@ export async function PUT(req: Request) {
   const { email, role, action, defaultMode, defaultInteraction, firstName, lastName } = await req.json();
   if (!email) return Response.json({ error: "email required" }, { status: 400 });
 
-  const users = await fetchUsersFromDrive();
   const key = email.toLowerCase();
-  if (!users[key]) {
+  const { rows: existing } = await sql`SELECT * FROM users WHERE email = ${key}`;
+  if (existing.length === 0) {
     return Response.json({ error: "User not found" }, { status: 404 });
   }
 
-  if (role) users[key].role = role;
-  if (defaultMode) users[key].defaultMode = defaultMode;
-  if (defaultInteraction) users[key].defaultInteraction = defaultInteraction;
-  if (firstName !== undefined) { users[key].firstName = firstName; users[key].name = [firstName, users[key].lastName || ""].join(" ").trim(); }
-  if (lastName !== undefined) { users[key].lastName = lastName; users[key].name = [users[key].firstName || "", lastName].join(" ").trim(); }
+  if (role) await sql`UPDATE users SET role = ${role}, updated_at = now() WHERE email = ${key}`;
+  if (defaultMode) await sql`UPDATE users SET default_mode = ${defaultMode}, updated_at = now() WHERE email = ${key}`;
+  if (defaultInteraction) await sql`UPDATE users SET default_interaction = ${defaultInteraction}, updated_at = now() WHERE email = ${key}`;
+  if (firstName !== undefined) await sql`UPDATE users SET first_name = ${firstName}, updated_at = now() WHERE email = ${key}`;
+  if (lastName !== undefined) await sql`UPDATE users SET last_name = ${lastName}, updated_at = now() WHERE email = ${key}`;
 
   if (action === "suspend") {
-    users[key].status = "suspended";
-    users[key].suspendedAt = new Date().toISOString();
-    users[key].sessionRevokedAt = new Date().toISOString();
+    await sql`UPDATE users SET status = 'suspended', updated_at = now() WHERE email = ${key}`;
   } else if (action === "unsuspend") {
-    users[key].status = "active";
-    users[key].suspendedAt = null;
+    await sql`UPDATE users SET status = 'active', updated_at = now() WHERE email = ${key}`;
   } else if (action === "revoke_sessions") {
-    users[key].sessionRevokedAt = new Date().toISOString();
+    // Session revocation is handled by NextAuth — just update timestamp
+    await sql`UPDATE users SET updated_at = now() WHERE email = ${key}`;
   } else if (action === "revoke_all") {
-    // Revoke sessions for ALL users except the caller
-    const callerEmail = session.user.email?.toLowerCase();
-    for (const k in users) {
-      if (k !== callerEmail) {
-        users[k].sessionRevokedAt = new Date().toISOString();
-      }
-    }
+    // Update all users except caller
+    const callerEmail = session.user.email?.toLowerCase() || "";
+    await sql`UPDATE users SET updated_at = now() WHERE email != ${callerEmail}`;
   } else if (action === "activate_pending") {
-    users[key].status = "active";
+    await sql`UPDATE users SET status = 'active', updated_at = now() WHERE email = ${key}`;
   }
 
-  await saveUsersToDrive(users);
-  return Response.json({ success: true, user: users[key] });
+  const { rows } = await sql`SELECT * FROM users WHERE email = ${key}`;
+  return Response.json({ success: true, user: rowToUser(rows[0]) });
 }
 
 // DELETE: remove user
@@ -235,14 +138,8 @@ export async function DELETE(req: Request) {
   const { email } = await req.json();
   if (!email) return Response.json({ error: "email required" }, { status: 400 });
 
-  const users = await fetchUsersFromDrive();
-  const key = email.toLowerCase();
-  delete users[key];
-
-  await saveUsersToDrive(users);
+  await sql`DELETE FROM users WHERE email = ${email.toLowerCase()}`;
   return Response.json({ success: true });
 }
 
-// Export for use by auth callback
-export { fetchUsersFromDrive, saveUsersToDrive };
 export type { UserRecord };

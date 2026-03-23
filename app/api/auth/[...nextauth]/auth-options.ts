@@ -1,5 +1,6 @@
 import GoogleProvider from "next-auth/providers/google";
 import type { NextAuthOptions } from "next-auth";
+import { sql } from "@vercel/postgres";
 
 const ALLOWED_DOMAIN = "freewyld.com";
 
@@ -16,50 +17,39 @@ export function isKbEditor(role: string): boolean {
   return role === "admin" || role === "knowledge_manager";
 }
 
-async function checkUserStatus(email: string): Promise<{ allowed: boolean; role: string }> {
-  const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
-  const password = process.env.WYLE_PASSWORD;
-  if (!webhookUrl || !password) return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
+async function checkUserStatus(email: string): Promise<{ allowed: boolean; role: string; reason?: string }> {
+  // Seed admins are always allowed
+  if (isAdmin(email)) {
+    try {
+      await sql`UPDATE users SET last_login = now(), status = 'active' WHERE email = ${email.toLowerCase()}`;
+    } catch { /* ok — table may not exist yet */ }
+    return { allowed: true, role: "admin" };
+  }
 
   try {
-    const listRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "list_files", password }),
-      redirect: "follow",
-    });
-    const listData = await listRes.json();
-    const file = (listData.files || []).find((f: { name: string }) => f.name === "Wyle-Users.json");
-    if (!file) return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
+    const { rows } = await sql`SELECT role, status FROM users WHERE email = ${email.toLowerCase()}`;
 
-    const fileRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_file", fileId: file.id, password }),
-      redirect: "follow",
-    });
-    const fileData = await fileRes.json();
-    const users = JSON.parse(fileData.content || "{}");
-    const user = users[email.toLowerCase()];
-
-    if (user) {
-      if (user.status === "suspended") return { allowed: false, role: user.role };
-      // Update last login
-      user.lastLogin = new Date().toISOString();
-      if (user.status === "pending") user.status = "active";
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_file", fileId: file.id, content: JSON.stringify(users, null, 2), password }),
-        redirect: "follow",
-      });
-      const resolvedRole = user.role === "standard" ? "user" : (user.role || (isAdmin(email) ? "admin" : "user"));
-      return { allowed: true, role: resolvedRole };
+    if (rows.length === 0) {
+      // User not in database — block access
+      return { allowed: false, role: "user", reason: "no_access" };
     }
 
-    return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
+    const user = rows[0];
+    if (user.status === "suspended") {
+      return { allowed: false, role: user.role, reason: "suspended" };
+    }
+
+    // Update last login and activate pending users
+    await sql`
+      UPDATE users SET last_login = now(), status = 'active', updated_at = now()
+      WHERE email = ${email.toLowerCase()}
+    `;
+
+    const resolvedRole = user.role === "standard" ? "user" : (user.role || "user");
+    return { allowed: true, role: resolvedRole };
   } catch {
-    return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
+    // Database error — fail closed for non-admin users
+    return { allowed: false, role: "user", reason: "error" };
   }
 }
 
@@ -75,8 +65,11 @@ export function getAuthOptions(): NextAuthOptions {
       async signIn({ user }) {
         const email = user.email?.toLowerCase() || "";
         if (!email.endsWith("@" + ALLOWED_DOMAIN)) return false;
-        const { allowed } = await checkUserStatus(email);
-        if (!allowed) return "/sign-in?error=Suspended";
+        const { allowed, reason } = await checkUserStatus(email);
+        if (!allowed) {
+          if (reason === "suspended") return "/sign-in?error=Suspended";
+          return "/sign-in?error=NoAccess";
+        }
         return true;
       },
       async jwt({ token, user }) {

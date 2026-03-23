@@ -43,11 +43,30 @@ async function migrate() {
   `;
   console.log("✓ user_preferences table created");
 
+  // users table
+  await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      role TEXT NOT NULL DEFAULT 'user',
+      status TEXT NOT NULL DEFAULT 'pending',
+      default_mode TEXT DEFAULT 'sales',
+      default_interaction TEXT DEFAULT 'client',
+      last_login TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+    )
+  `;
+  console.log("✓ users table created");
+
   // indexes
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(user_id, updated_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_messages_content_search ON messages USING gin(to_tsvector('english', content))`;
+  await sql`CREATE INDEX IF NOT EXISTS users_email_idx ON users(email)`;
   console.log("✓ indexes created");
 
   console.log("Migration complete.");
