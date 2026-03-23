@@ -239,6 +239,9 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
 
   const knowledgeChars = config.knowledge.reduce((s, k) => s + (files[k]?.length || 0), 0);
   console.log(`[chat] Prompt: agents=${config.agents.length}, knowledge=${knowledgeChars}, format=${formatContent.length}, total=${total.length.toLocaleString()} chars. Mode: ${mode}/${interactionMode}. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
+  // Debug: log prompt start and key checks
+  console.log(`[chat] DEBUG prompt first 2000 chars:\n${total.substring(0, 2000)}`);
+  console.log(`[chat] DEBUG checks: hasCritical=${total.includes("CRITICAL FORMAT INSTRUCTION")}, hasSIMPLE=${total.includes("## SIMPLE")}, hasExpandPrompt=${total.includes("EXPAND_PROMPT")}, hasSkillFile=${total.includes("RESPONSE FORMAT")}`);
 
   return total;
 }
@@ -275,15 +278,18 @@ export async function POST(req: Request) {
 
     const encoder = new TextEncoder();
     let firstToken = true;
+    let rawResponse = "";
     const readable = new ReadableStream({
       async start(controller) {
         for await (const event of stream) {
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
             if (firstToken) { console.log(`[chat] First token at +${Date.now() - t0}ms`); firstToken = false; }
+            rawResponse += event.delta.text;
             controller.enqueue(encoder.encode(event.delta.text));
           }
         }
-        console.log(`[chat] Stream complete at +${Date.now() - t0}ms`);
+        console.log(`[chat] Stream complete at +${Date.now() - t0}ms. Raw response (first 500): ${rawResponse.substring(0, 500)}`);
+        console.log(`[chat] DEBUG raw response checks: hasExpandPrompt=${rawResponse.includes("[[EXPAND_PROMPT]]")}, hasSIMPLE=${rawResponse.includes("## SIMPLE")}, hasMoreDetail=${rawResponse.includes("MORE DETAIL")}, length=${rawResponse.length}`);
         controller.close();
       },
     });
