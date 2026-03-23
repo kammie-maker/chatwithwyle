@@ -1253,6 +1253,18 @@ ${context}`;
                 + New Chat
               </button>
             </div>
+            {/* Guide link */}
+            <button onClick={() => setActiveTab("guide")}
+              style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, width: "calc(100% - 24px)",
+                background: activeTab === "guide" ? "rgba(204,138,57,0.15)" : "transparent",
+                borderLeft: activeTab === "guide" ? "2px solid #CC8A39" : "2px solid transparent",
+                color: activeTab === "guide" ? "#f8f6ee" : "rgba(248,246,238,0.6)",
+                border: "none", cursor: "pointer", fontSize: 13, fontFamily: "var(--font-body)", transition: "all 0.15s", textAlign: "left" }}
+              onMouseEnter={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#f8f6ee"; } }}
+              onMouseLeave={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(248,246,238,0.6)"; } }}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 16, height: 16, flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+              Guide
+            </button>
             {/* Search */}
             <div className="px-3 mb-2">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
@@ -1445,12 +1457,6 @@ ${context}`;
                 Knowledge Base
               </button>
             )}
-            <button onClick={() => setActiveTab("guide")}
-              style={{ fontSize: 15, fontWeight: 500, padding: "6px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s ease",
-                background: activeTab === "guide" ? "#161616" : "transparent",
-                color: activeTab === "guide" ? "#f8f6ee" : "#777" }}>
-              Guide
-            </button>
           </div>
         </div>
 
