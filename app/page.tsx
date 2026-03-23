@@ -209,10 +209,10 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   const isDraft = !!draftLabel && (draftLabel.startsWith("Draft") || draftLabel === "Slack Draft");
   const isRecontextualize = draftLabel === "recontextualize";
 
-  // For recontextualize messages, split on --- divider
+  // For recontextualize messages, split on --- divider ONLY after streaming completes
   let recontextPreamble = "";
   let mainText = text;
-  if (isRecontextualize && text) {
+  if (isRecontextualize && !isStreaming && text) {
     const dividerMatch = text.match(/^([\s\S]*?)\n---+\n([\s\S]*)$/);
     if (dividerMatch) {
       recontextPreamble = dividerMatch[1].trim();
@@ -220,7 +220,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
     }
   }
 
-  const parsed = parseResponse(mainText);
+  const parsed = parseResponse(isStreaming && isRecontextualize ? "" : mainText);
   const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
 
   // Clean content: strip "---" horizontal rules and meta-commentary
@@ -487,6 +487,7 @@ export default function Home() {
   const streamingConvRef = useRef<string | null>(null); // which conversation is currently streaming
   const activeConvRef = useRef<string | null>(null); // tracks activeConvId for use in async callbacks
   const [bgStreaming, setBgStreaming] = useState<Set<string>>(new Set()); // conversations streaming in background
+  const streamThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null); // throttle stream UI updates
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -778,11 +779,19 @@ The --- divider must appear on its own line with nothing before or after it on t
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
+        // Throttle UI updates — render raw text during stream, no splitting
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: "recontextualize" }; return copy; });
+          if (!streamThrottleRef.current) {
+            const captured = fullText;
+            setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: captured, interactionMode, mode: newMode, draftLabel: "recontextualize" }; return copy; });
+            streamThrottleRef.current = setTimeout(() => { streamThrottleRef.current = null; }, 50);
+          }
         }
       }
-      fullText = cleanResponse(fullText);
+      if (streamThrottleRef.current) { clearTimeout(streamThrottleRef.current); streamThrottleRef.current = null; }
+      // Do NOT run cleanResponse here — it strips --- which is needed as the preamble/content divider
+      // The clean() function inside AssistantMessage handles stripping on the post-split content
+      fullText = fullText.replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").trim();
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[dividerIdx] = { ...copy[dividerIdx], content: `Now in ${MODE_LABELS[newMode]}` }; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: "recontextualize" }; return copy; });
       }
@@ -851,12 +860,16 @@ The --- divider must appear on its own line with nothing before or after it on t
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
-        // Only update UI if user is still viewing this conversation — use functional update to avoid resetting
+        // Throttle UI updates to every 50ms to prevent mid-stream re-render thrash
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          const captured = fullText; // capture for closure
-          setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: captured }; } return copy; });
+          if (!streamThrottleRef.current) {
+            const captured = fullText;
+            setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: captured }; } return copy; });
+            streamThrottleRef.current = setTimeout(() => { streamThrottleRef.current = null; }, 50);
+          }
         }
       }
+      if (streamThrottleRef.current) { clearTimeout(streamThrottleRef.current); streamThrottleRef.current = null; }
       fullText = cleanResponse(fullText);
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: fullText }; } return copy; });
@@ -1084,9 +1097,14 @@ ${context}`;
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: label }; return copy; });
+          if (!streamThrottleRef.current) {
+            const captured = fullText;
+            setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: captured, interactionMode, draftLabel: label }; return copy; });
+            streamThrottleRef.current = setTimeout(() => { streamThrottleRef.current = null; }, 50);
+          }
         }
       }
+      if (streamThrottleRef.current) { clearTimeout(streamThrottleRef.current); streamThrottleRef.current = null; }
       fullText = cleanResponse(fullText);
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: label }; return copy; });
