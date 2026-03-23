@@ -359,7 +359,7 @@ export default function GuideContent({ userRole }: { userRole: string }) {
   const isAdmin = userRole === "admin";
 
   const tabs: { key: GuideTab; label: string }[] = [
-    { key: "user", label: "Your Guide" },
+    { key: "user", label: "Chat Guide" },
     ...(isKb ? [{ key: "kb" as GuideTab, label: "Knowledge Base Guide" }] : []),
     ...(isAdmin ? [{ key: "admin" as GuideTab, label: "Admin Guide" }] : []),
   ];
@@ -382,7 +382,7 @@ export default function GuideContent({ userRole }: { userRole: string }) {
           </div>
         )}
 
-        {/* ── Your Guide ── */}
+        {/* ── Chat Guide ── */}
         {activeGuideTab === "user" && (
           <>
             <Accordion title="Getting Started" defaultOpen>
