@@ -11,7 +11,6 @@ interface TourAction {
 
 interface TourContextValue {
   isTourActive: boolean;
-  isTransitioning: boolean;
   currentStep: number;
   steps: TourStep[];
   startTour: () => void;
@@ -24,7 +23,6 @@ interface TourContextValue {
 
 const TourContext = createContext<TourContextValue>({
   isTourActive: false,
-  isTransitioning: false,
   currentStep: 0,
   steps: [],
   startTour: () => {},
@@ -41,7 +39,6 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const userRole = (session?.user as Record<string, unknown>)?.role as string || "user";
   const [isTourActive, setIsTourActive] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [tourAction, setTourAction] = useState<TourAction | null>(null);
   const [checked, setChecked] = useState(false);
@@ -61,19 +58,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const completeTour = useCallback(() => {
     setIsTourActive(false);
-    setIsTransitioning(false);
     setCurrentStep(0);
     fetch("/api/user/tour", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tourCompleted: true }) }).catch(() => {});
-  }, []);
-
-  // Transition helper: hide tooltip, wait for DOM to settle, then show new step
-  const transitionToStep = useCallback((idx: number, delay = 100) => {
-    setIsTransitioning(true);
-    setTimeout(() => {
-      setCurrentStep(idx);
-      // Use a fixed timeout instead of rAF for reliable timing
-      setTimeout(() => setIsTransitioning(false), 50);
-    }, delay);
   }, []);
 
   const nextStep = useCallback(() => {
@@ -81,19 +67,22 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     if (next >= steps.length) { completeTour(); return; }
     const step = steps[next];
     if (step.beforeShow) setTourAction(step.beforeShow);
-    // Modal steps need minimal delay, spotlight steps need more
-    const delay = step.beforeShow?.setActiveTab ? 300 : step.isModal ? 50 : 100;
-    transitionToStep(next, delay);
-  }, [currentStep, steps, completeTour, transitionToStep]);
+    // For tab switches, delay so the DOM renders first
+    if (step.beforeShow?.setActiveTab) {
+      setTimeout(() => setCurrentStep(next), 300);
+    } else {
+      setCurrentStep(next);
+    }
+  }, [currentStep, steps, completeTour]);
 
   const prevStep = useCallback(() => {
     if (currentStep > 0) {
       const prev = currentStep - 1;
       const step = steps[prev];
       if (step.beforeShow) setTourAction(step.beforeShow);
-      transitionToStep(prev, 100);
+      setCurrentStep(prev);
     }
-  }, [currentStep, steps, transitionToStep]);
+  }, [currentStep, steps]);
 
   const skipTour = useCallback(() => { completeTour(); }, [completeTour]);
 
@@ -118,7 +107,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   }, [isTourActive, nextStep, prevStep, skipTour]);
 
   return (
-    <TourContext.Provider value={{ isTourActive, isTransitioning, currentStep, steps, startTour, nextStep, prevStep, skipTour, tourAction, clearTourAction }}>
+    <TourContext.Provider value={{ isTourActive, currentStep, steps, startTour, nextStep, prevStep, skipTour, tourAction, clearTourAction }}>
       {children}
     </TourContext.Provider>
   );
