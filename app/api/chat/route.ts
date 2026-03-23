@@ -76,16 +76,22 @@ async function fetchKnowledgeBase(): Promise<string> {
   if (kbCache && lastUpdate > kbCache.fetchedAt) { kbCache = null; }
   if (kbCache && Date.now() - kbCache.fetchedAt < CACHE_TTL) return kbCache.text;
 
-  const url = process.env.GOOGLE_DRIVE_KB_URL;
-  if (!url) return "";
+  const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
+  const password = process.env.WYLE_PASSWORD;
+  const masterId = "1IjtO_gdiK2-lFevZ66E6KRTuzy-J89xp";
+  if (!webhookUrl || !password) return "";
 
   const t0 = Date.now();
   try {
-    const res = await fetch(url, { cache: "no-store" });
-    let text = await res.text();
+    const res = await fetch(webhookUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get_file", fileId: masterId, password }), redirect: "follow",
+    });
+    const data = await res.json();
+    let text = data.content || "";
     text = text.replace(/^.*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*$/gm, "");
     text = text.replace(/^.*[A-Z][a-z]+\s+[A-Z][a-z]+.*\$[\d,]+.*$/gm, "");
-    console.log(`[chat] KB fetched in ${Date.now() - t0}ms: ${text.length.toLocaleString()} chars`);
+    console.log(`[chat] KB fetched via webhook in ${Date.now() - t0}ms: ${text.length.toLocaleString()} chars`);
     kbCache = { text, fetchedAt: Date.now() };
     return text;
   } catch (err) { console.log(`[chat] KB fetch error: ${err}`); return kbCache?.text || ""; }
