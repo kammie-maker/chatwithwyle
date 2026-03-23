@@ -6,7 +6,6 @@ const ALLOWED_DOMAIN = "freewyld.com";
 
 const ADMIN_EMAILS = [
   "kammie@freewyld.com",
-  "eric@freewyld.com",
 ];
 
 export function isAdmin(email: string): boolean {

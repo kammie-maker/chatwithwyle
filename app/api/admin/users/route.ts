@@ -17,7 +17,6 @@ interface UserRecord {
 
 const SEED_ADMINS = [
   { email: "kammie@freewyld.com", firstName: "Kammie", lastName: "Melton" },
-  { email: "eric@freewyld.com", firstName: "Eric", lastName: "Moeller" },
 ];
 
 async function ensureAdminsSeed() {
