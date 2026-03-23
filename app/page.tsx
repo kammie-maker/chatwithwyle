@@ -207,7 +207,20 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 }) {
   const isResearch = msgInteractionMode === "research";
   const isDraft = !!draftLabel && (draftLabel.startsWith("Draft") || draftLabel === "Slack Draft");
-  const parsed = parseResponse(text);
+  const isRecontextualize = draftLabel === "recontextualize";
+
+  // For recontextualize messages, split on --- divider
+  let recontextPreamble = "";
+  let mainText = text;
+  if (isRecontextualize && text) {
+    const dividerMatch = text.match(/^([\s\S]*?)\n---+\n([\s\S]*)$/);
+    if (dividerMatch) {
+      recontextPreamble = dividerMatch[1].trim();
+      mainText = dividerMatch[2].trim();
+    }
+  }
+
+  const parsed = parseResponse(mainText);
   const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
 
   // Clean content: strip "---" horizontal rules and meta-commentary
@@ -219,7 +232,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   }
 
   // Get SIMPLE content (first section or entire text)
-  const simpleContent = clean(parsed.sections[0]?.content || text);
+  const simpleContent = clean(parsed.sections[0]?.content || mainText);
 
   // Render sections in click order (sectionOrder), not preset order
   const expandedKeys = Object.keys(inlineExpanded);
@@ -245,14 +258,14 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             <CopyButton text={[simpleContent, ...Object.values(inlineExpanded)].join("\n\n")} />
           </div>
         )}
-        {/* Label row: INTERNAL badge and/or Draft label */}
-        {(isResearch || isDraft) && (
+        {/* Label row: INTERNAL badge and/or Draft label (not for recontextualize) */}
+        {(isResearch || (isDraft && !isRecontextualize)) && (
           <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
             {isResearch && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "#3c3b22", color: "#f8f6ee", fontWeight: 600 }}>INTERNAL</span>}
-            {isDraft && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "var(--text-muted)", fontWeight: 600 }}>{draftLabel}</span>}
+            {isDraft && !isRecontextualize && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "var(--text-muted)", fontWeight: 600 }}>{draftLabel}</span>}
           </div>
         )}
-        <div className="py-3" style={{ paddingLeft: 20, paddingRight: 0, paddingTop: isResearch || isDraft ? 8 : undefined }}>
+        <div className="py-3" style={{ paddingLeft: 20, paddingRight: 0, paddingTop: isResearch || (isDraft && !isRecontextualize) ? 8 : undefined }}>
           {/* Error state */}
           {isError ? (
             <div role="alert" className="flex items-center gap-3">
@@ -261,6 +274,13 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             </div>
           ) : (
             <>
+              {/* Recontextualize preamble — plain text before the SIMPLE response */}
+              {isRecontextualize && recontextPreamble && (
+                <>
+                  <div className="msg-content whitespace-pre-wrap" style={{ fontSize: 16, color: "var(--color-onyx)" }}>{recontextPreamble}</div>
+                  <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "14px 0" }} />
+                </>
+              )}
               {/* SIMPLE / base content */}
               <div className="msg-content whitespace-pre-wrap">{simpleContent}</div>
               {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1" aria-label="Wyle is thinking" aria-busy="true"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
@@ -706,9 +726,9 @@ export default function Home() {
     setModeSwitchPrompt(null);
     setChatMode(newMode);
 
-    // Add divider
+    // Add divider then the recontextualize message
     const dividerMsg: Message = { role: "assistant", content: `${MODE_LABELS[newMode]} is reviewing the conversation`, isDivider: true, mode: newMode };
-    const recontextMsg: Message = { role: "assistant", content: "", interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` };
+    const recontextMsg: Message = { role: "assistant", content: "", interactionMode, mode: newMode, draftLabel: "recontextualize" };
     setMessages(prev => [...prev, dividerMsg, recontextMsg]);
     setStreaming(true);
 
@@ -723,9 +743,30 @@ export default function Home() {
     }
 
     try {
+      const recontextPrompt = `You are switching from ${MODE_LABELS[oldMode]} to ${MODE_LABELS[newMode]} in an ongoing conversation.
+
+Do the following in this exact structure and no other:
+
+First, write 1 to 4 sentences that naturally acknowledge the context shift. Speak directly to the rep. Reference what was just being discussed and frame how ${MODE_LABELS[newMode]} sees it differently or can build on it. Do not summarize the whole conversation. Do not say 'as [role]' or announce your role. Just speak naturally from the new perspective.
+
+Then output exactly this on its own line:
+---
+
+Then immediately answer the most recent question from the conversation as ${MODE_LABELS[newMode]}, following ALL formatting rules exactly as if this were a fresh response in ${MODE_LABELS[newMode]}:
+- Start with ## SIMPLE
+- Write the SIMPLE section as a direct word-for-word client-facing script (or rep-facing if Internal Research)
+- End with [[EXPAND_PROMPT]]
+- Follow all CRITICAL FORMAT INSTRUCTION rules
+- Follow all ${MODE_LABELS[newMode]} Skill file rules exactly
+
+Do not add any preamble before the recontextualization sentences.
+Do not explain what you are doing.
+Do not use any section headers before the --- divider.
+The --- divider must appear on its own line with nothing before or after it on that line.`;
+
       const contextMessages = [
         ...messages.filter(m => !m.isDivider).map(m => ({ role: m.role, content: m.content })),
-        { role: "user" as const, content: `The user has switched from ${MODE_LABELS[oldMode]} to ${MODE_LABELS[newMode]}. Review the conversation above and provide a recontextualized response that re-answers the most relevant question(s) from the conversation through the lens of ${MODE_LABELS[newMode]}, briefly notes how the previous context is relevant or different from this role's perspective, transitions naturally into being ready to help with ${MODE_LABELS[newMode]} tasks, and follows all ${MODE_LABELS[newMode]} skill file rules exactly including SIMPLE/DEEPER format. Keep it concise. This is a transition, not a full recap.` }
+        { role: "user" as const, content: recontextPrompt }
       ];
 
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: contextMessages, mode: newMode, interactionMode }) });
@@ -738,12 +779,12 @@ export default function Home() {
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
+          setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: "recontextualize" }; return copy; });
         }
       }
       fullText = cleanResponse(fullText);
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages(prev => { const copy = [...prev]; copy[dividerIdx] = { ...copy[dividerIdx], content: `Now in ${MODE_LABELS[newMode]}` }; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
+        setMessages(prev => { const copy = [...prev]; copy[dividerIdx] = { ...copy[dividerIdx], content: `Now in ${MODE_LABELS[newMode]}` }; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: "recontextualize" }; return copy; });
       }
       if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {

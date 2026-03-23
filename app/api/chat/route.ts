@@ -150,6 +150,7 @@ Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No e
 - Never write 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' as words.
 - Never use pipe characters (|).
 - Every question is about Freewyld Foundry specifically. Never give generic industry answers. If the knowledge base lacks a Freewyld-specific answer, say so.
+- When recontextualizing after a mode switch, never announce your role, never say 'as the [role]', never summarize the previous conversation. Write 1 to 4 natural sentences that acknowledge the shift then immediately provide a properly formatted SIMPLE response to the most recent question.
 
 Follow the active Format and Skill file rules exactly.`;
 
@@ -168,6 +169,7 @@ A direct 2-3 sentence answer. Speak to the rep. No scripts.
 - Never ask about MORE DETAIL/FULL SCRIPT/REP NOTES or reference UI buttons.
 - Never begin a section response with any statement about what section you are providing. Start immediately with the content.
 - Every question is about Freewyld specifically.
+- When recontextualizing after a mode switch, never announce your role, never say 'as the [role]', never summarize the previous conversation. Write 1 to 4 natural sentences that acknowledge the shift then provide a properly formatted SIMPLE response.
 - No REP NOTES section. Everything here is already internal.`;
 
 // ── Build system prompt ──
