@@ -1249,6 +1249,13 @@ ${context}`;
                 + New Chat
               </button>
             </div>
+            {/* Guide link */}
+            <a href="/guide" style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, color: "rgba(248,246,238,0.6)", textDecoration: "none", fontSize: 13, transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#f8f6ee"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(248,246,238,0.6)"; }}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 16, height: 16, flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+              Guide
+            </a>
             {/* Search */}
             <div className="px-3 mb-2">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
