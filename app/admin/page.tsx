@@ -152,37 +152,40 @@ export default function AdminPage() {
         </div>
 
         {/* Desktop table */}
-        <div className="hidden md:block" style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)" }}>
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 1060 }}>
-              {/* Header */}
-              <div className="flex items-center px-5 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)" }}>
-                {[["First", 120], ["Last", 120], ["Email", 200], ["Role", 110], ["Status", 100], ["Mode", 140], ["Type", 160], ["Last Login", 130]].map(([h, w]) => (
-                  <div key={h as string} style={{ flex: `0 0 ${w}px`, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1.5px" }}>{h as string}</div>
-                ))}
-                <div style={{ flex: 1, textAlign: "right", fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1.5px" }}>Actions</div>
-              </div>
-              {loading ? <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-              : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "rgba(22,22,22,0.4)" }}>No active users.</div>
-              : active.map(u => {
-                const st = STATUS_STYLES[u.status] || STATUS_STYLES.active;
-                return (
-                  <div key={u.email} className="flex items-center px-5 transition-all" style={{ minHeight: 56, borderBottom: "1px solid rgba(22,22,22,0.04)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <div style={{ flex: "0 0 120px", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} /></div>
-                    <div style={{ flex: "0 0 120px", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} /></div>
-                    <div style={{ flex: "0 0 200px", fontSize: 12, color: "rgba(22,22,22,0.55)" }}>{u.email}</div>
-                    <div style={{ flex: "0 0 110px" }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
-                    <div style={{ flex: "0 0 100px" }}><span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
-                    <div style={{ flex: "0 0 140px" }}><select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={sel}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select></div>
-                    <div style={{ flex: "0 0 160px" }}><select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} style={sel}><option value="client">Client Interaction</option><option value="research">Internal Research</option></select></div>
-                    <div style={{ flex: "0 0 130px", fontSize: 12, color: "rgba(22,22,22,0.45)" }}>{formatLogin(u.lastLogin)}</div>
-                    <div style={{ flex: 1, textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} /></div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="hidden md:block" style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden" }}>
+          {/* Header */}
+          <div className="flex items-center px-4 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)", gap: 8 }}>
+            <div style={{ flex: 2, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Name</div>
+            <div style={{ flex: 3, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Email</div>
+            <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Role</div>
+            <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Status</div>
+            <div style={{ flex: 2, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Defaults</div>
+            <div style={{ flex: 1.5, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Login</div>
+            <div style={{ width: 40 }} />
           </div>
+          {loading ? <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
+          : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "rgba(22,22,22,0.4)" }}>No active users.</div>
+          : active.map(u => {
+            const st = STATUS_STYLES[u.status] || STATUS_STYLES.active;
+            return (
+              <div key={u.email} className="flex items-center px-4 transition-all" style={{ minHeight: 52, borderBottom: "1px solid rgba(22,22,22,0.04)", gap: 8 }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ flex: 2, fontSize: 13, fontWeight: 500, display: "flex", gap: 4 }}>
+                  <InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} />
+                  <InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} />
+                </div>
+                <div style={{ flex: 3, fontSize: 12, color: "rgba(22,22,22,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                <div style={{ flex: 1 }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Std</option><option value="admin">Admin</option></select></div>
+                <div style={{ flex: 1 }}><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
+                <div style={{ flex: 2, display: "flex", gap: 4 }}>
+                  <select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={{ ...sel, flex: 1, minWidth: 0 }}><option value="sales">Sales</option><option value="client-success">CS</option><option value="fulfillment">Rev</option><option value="onboarding">Onb</option></select>
+                  <select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} style={{ ...sel, flex: 1, minWidth: 0 }}><option value="client">Client</option><option value="research">Research</option></select>
+                </div>
+                <div style={{ flex: 1.5, fontSize: 11, color: "rgba(22,22,22,0.45)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
+                <div style={{ width: 40, textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} /></div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Mobile card layout */}
