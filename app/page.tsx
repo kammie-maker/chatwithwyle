@@ -192,9 +192,9 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, isError, onRetry, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, isError, onRetry, inlineExpanded, sectionOrder, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
   text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode; draftLabel?: string; isError?: boolean; onRetry?: () => void;
-  inlineExpanded: Record<string, string>; expandLoading: string | undefined; expandingAll: boolean;
+  inlineExpanded: Record<string, string>; sectionOrder: string[]; expandLoading: string | undefined; expandingAll: boolean;
   onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void;
   handleClarifyOption: (opt: string) => void;
   clarifyInput: string; setClarifyInput: (v: string) => void;
@@ -204,19 +204,27 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   const parsed = parseResponse(text);
   const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
 
-  // Clean content: strip "---" horizontal rules
-  function clean(s: string) { return s.replace(/^#{2,4}\s+(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "").replace(/^\*\*(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL)\*\*\s*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim(); }
+  // Clean content: strip "---" horizontal rules and meta-commentary
+  function clean(s: string) {
+    let cleaned = s.replace(/^#{2,4}\s+(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "").replace(/^\*\*(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL)\*\*\s*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim();
+    // Strip meta-commentary
+    cleaned = cleaned.replace(/^Here is the\s+(?:MORE DETAIL|FULL SCRIPT|REP NOTES|SIMPLE|DEEPER|DEEPEST|INTERNAL)[^.\n]*(?:section|response)[^.\n]*\.?\s*\n*/i, "").replace(/^Here is the\s+[^.\n]*\s+section\s+as\s+requested[^.\n]*\.?\s*\n*/i, "").replace(/^\n+/, "").trim();
+    return cleaned;
+  }
 
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || text);
 
-  // Which sections are already expanded inline
+  // Render sections in click order (sectionOrder), not preset order
   const expandedKeys = Object.keys(inlineExpanded);
+  // Build render order: use sectionOrder for revealed, then include loading key if not already in order
+  const renderOrder = [...sectionOrder];
+  if (expandLoading && !renderOrder.includes(expandLoading)) renderOrder.push(expandLoading);
   const allExpandKeys = isResearch ? ["MORE DETAIL", "FULL SCRIPT"] : ["MORE DETAIL", "FULL SCRIPT", "REP NOTES"];
   const availablePills = allExpandKeys.filter(k => !expandedKeys.includes(k) && k !== expandLoading);
 
   return (
-    <div className="flex gap-3 max-w-[85%]">
+    <div className="flex gap-3" style={{ maxWidth: "100%" }}>
       <div className={`shrink-0 mt-0.5 ${isStreaming ? "avatar-streaming" : ""}`} style={{ width: 40, height: 40 }}>
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 40, height: 40 }} aria-label="Wyle" role="img">
           <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
@@ -254,17 +262,17 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           )}
 
           {!isError && <>
-          {/* Inline expanded sections */}
-          {allExpandKeys.map(k => {
+          {/* Inline expanded sections — rendered in click order */}
+          {renderOrder.map(k => {
             const content = inlineExpanded[k];
             if (!content && k !== expandLoading) return null;
             return (
               <div key={k} className="section-divider">
-                <div className="text-label mb-1.5" style={{ color: "var(--color-mustard)" }}>
+                <div style={{ fontSize: 12, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600, color: "var(--color-mustard)", marginBottom: 8 }}>
                   {SECTION_DISPLAY[k] || k}
                 </div>
                 {content ? (
-                  <div className="msg-content whitespace-pre-wrap">{clean(content)}</div>
+                  <div className="msg-content whitespace-pre-wrap" style={{ marginTop: 0 }}>{clean(content)}</div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-mustard)" }}>
                     <Spinner size={12} color="var(--color-mustard)" />
@@ -459,6 +467,8 @@ export default function Home() {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   // Per-message inline expanded sections: msgIndex -> { sectionKey: content }
   const [inlineExpanded, setInlineExpanded] = useState<Record<number, Record<string, string>>>({});
+  // Per-message ordered list of revealed section keys (click order)
+  const [expandOrder, setExpandOrder] = useState<Record<number, string[]>>({});
   const [expandLoading, setExpandLoading] = useState<Record<number, string>>({}); // msgIndex -> currently loading section key
   const [expandingAll, setExpandingAll] = useState<Record<number, boolean>>({}); // msgIndex -> expanding all in progress
   const [clarifyInput, setClarifyInput] = useState("");
@@ -513,6 +523,7 @@ export default function Home() {
       setActiveConvId(data.conversation.id);
       setMessages([]);
       setInlineExpanded({});
+      setExpandOrder({});
       setExpandLoading({});
       setExpandingAll({});
       loadConversations();
@@ -543,6 +554,7 @@ export default function Home() {
         }));
         setMessages(msgs);
         setInlineExpanded({});
+        setExpandOrder({});
         setExpandLoading({});
       }
     } catch { /* ignore */ }
@@ -664,6 +676,7 @@ export default function Home() {
     setActiveConvId(null);
     setMessages([]);
     setInlineExpanded({});
+    setExpandOrder({});
     setExpandLoading({});
     setExpandingAll({});
     createNewChat();
@@ -821,7 +834,16 @@ export default function Home() {
   function handleSend() { sendMessage(input); }
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) { const fileList = e.target.files; if (!fileList) return; const files = Array.from(fileList); if (pendingFiles.length + files.length > 10) { setToast("Maximum 10 files at once"); e.target.value = ""; return; } for (const file of files) { if (file.size > 10 * 1024 * 1024) { setToast(`${file.name} exceeds 10MB limit`); continue; } const isImage = IMAGE_TYPES.includes(file.type); const isPdf = file.type === "application/pdf"; const isText = /\.(txt|md|csv)$/i.test(file.name); if (!isImage && !isPdf && !isText) continue; const reader = new FileReader(); reader.onload = () => { const result = reader.result as string; const base64 = result.split(",")[1]; const preview = isImage ? result : null; const fileType: PendingFile["fileType"] = isImage ? "image" : isPdf ? "pdf" : "text"; setPendingFiles(prev => prev.length >= 10 ? prev : [...prev, { name: file.name, base64, mediaType: file.type, preview, fileType }]); }; reader.readAsDataURL(file); } e.target.value = ""; }
   function removePendingFile(index: number) { setPendingFiles(prev => prev.filter((_, i) => i !== index)); }
-  function clearConversation() { setMessages([]); setInlineExpanded({}); setExpandLoading({}); setExpandingAll({}); }
+  function clearConversation() { setMessages([]); setInlineExpanded({}); setExpandOrder({}); setExpandLoading({}); setExpandingAll({}); }
+
+  // Strip meta-commentary like "Here is the MORE DETAIL section as requested."
+  function stripMetaCommentary(text: string): string {
+    return text
+      .replace(/^Here is the\s+(?:MORE DETAIL|FULL SCRIPT|REP NOTES|SIMPLE|DEEPER|DEEPEST|INTERNAL)[^.\n]*(?:section|response)[^.\n]*\.?\s*\n*/i, "")
+      .replace(/^Here is the\s+[^.\n]*\s+section\s+as\s+requested[^.\n]*\.?\s*\n*/i, "")
+      .replace(/^\n+/, "")
+      .trim();
+  }
 
   async function expandSectionInline(msgIdx: number, sectionKey: string) {
     if (expandLoading[msgIdx]) return; // already loading something for this msg
@@ -831,13 +853,20 @@ export default function Home() {
     const userMsg = msgIdx > 0 ? messages[msgIdx - 1] : null;
     if (!assistantMsg || !userMsg) return;
 
+    // Track click order — append to order array if not already present
+    setExpandOrder(prev => {
+      const existing = prev[msgIdx] || [];
+      if (existing.includes(sectionKey)) return prev;
+      return { ...prev, [msgIdx]: [...existing, sectionKey] };
+    });
+
     setExpandLoading(prev => ({ ...prev, [msgIdx]: sectionKey }));
 
     try {
       const contextMessages = [
         { role: userMsg.role, content: userMsg.content },
         { role: assistantMsg.role, content: assistantMsg.content },
-        { role: "user", content: `Give me only the ${sectionKey} section. No SIMPLE section. Start directly with the ## ${sectionKey} header.` }
+        { role: "user", content: `Give me only the ${sectionKey} section. No SIMPLE section. Start directly with the content. Do not say "Here is the ${sectionKey} section" or any similar preamble.` }
       ];
 
       const res = await fetch("/api/chat", {
@@ -865,6 +894,8 @@ export default function Home() {
       fullText = fullText.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim();
       // Strip the section header if Claude included it
       fullText = fullText.replace(new RegExp("^#{2,4}\\s+" + sectionKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\n?", "i"), "").trim();
+      // Strip meta-commentary
+      fullText = stripMetaCommentary(fullText);
 
       setInlineExpanded(prev => ({
         ...prev,
@@ -876,6 +907,11 @@ export default function Home() {
         const copy = { ...prev };
         if (copy[msgIdx]) delete copy[msgIdx][sectionKey];
         return copy;
+      });
+      // Remove from order on failure
+      setExpandOrder(prev => {
+        const existing = prev[msgIdx] || [];
+        return { ...prev, [msgIdx]: existing.filter(k => k !== sectionKey) };
       });
     } finally {
       setExpandLoading(prev => { const copy = { ...prev }; delete copy[msgIdx]; return copy; });
@@ -1045,247 +1081,273 @@ ${context}`;
     </div>
   );
 
-  // ── Main app ──
+  // ── Main app ── // force redeploy 2026-03-22
   return (
-    <div className="h-screen flex flex-col" style={{ background: "var(--bg-content)" }}>
-      {/* ── Header ── */}
-      <header role="banner" className="shrink-0 flex items-center justify-between px-5" style={{ height: 60, background: "var(--bg-header)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 8px rgba(22,22,22,0.2)" }}>
-        <div className="flex items-center gap-3">
-          {/* Mobile hamburger */}
-          {activeTab === "chat" && (
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Open conversation menu" className="hide-desktop"
-              style={{ background: "none", border: "none", color: "var(--color-cream)", cursor: "pointer", padding: 8 }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 20, height: 20 }}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+    <div className="h-screen flex" style={{ background: "var(--bg-content)" }}>
+      {/* ── LEFT ZONE — Sidebar ── */}
+      <nav ref={sidebarRef} aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
+        style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden", position: "relative" }}
+        onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
+        onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
+        onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
+        {/* Sidebar header — logo + name + collapse */}
+        <div className="shrink-0 flex items-center" style={{ height: 64, padding: chatSidebarOpen ? "0 12px 0 16px" : "0", justifyContent: chatSidebarOpen ? "space-between" : "center" }}>
+          {chatSidebarOpen ? (
+            <>
+              <div className="flex items-center" style={{ gap: 10 }}>
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8 }} aria-label="Wyle" role="img">
+                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+                  <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
+                </svg>
+                <span style={{ fontSize: 18, fontWeight: 600, color: "#f8f6ee", fontFamily: "var(--font-heading)" }}>Wyle</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {mobileMenuOpen && (
+                  <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="hide-desktop"
+                    style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44 }}>
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                )}
+                <button onClick={() => setChatSidebarOpen(false)} aria-label="Collapse sidebar" className="hide-mobile"
+                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44 }}
+                  onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.5)"}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                </button>
+              </div>
+            </>
+          ) : (
+            <button onClick={() => setChatSidebarOpen(true)} aria-label="Expand sidebar" className="hide-mobile"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 32, height: 32, borderRadius: 6 }} aria-hidden="true">
+                <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+              </svg>
             </button>
           )}
-          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="shrink-0" style={{ width: 32, height: 32 }} aria-label="Wyle" role="img">
-            <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
-            <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
-            <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
-          </svg>
-          <h1 className="text-base font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--color-cream)" }}>Wyle</h1>
-          {/* Tabs */}
-          <div className="flex gap-1 ml-6">
-            <button onClick={() => setActiveTab("chat")} className="px-3 py-1.5 text-xs font-medium transition-all"
-              style={{ borderRadius: "6px", background: activeTab === "chat" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "chat" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
+        </div>
+
+        {/* Collapsed: expand button below avatar */}
+        {!chatSidebarOpen && (
+          <div className="hide-mobile" style={{ display: "flex", justifyContent: "center", padding: "4px 0" }}>
+            <button onClick={() => setChatSidebarOpen(true)} aria-label="Expand sidebar"
+              style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.5)"}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+            </button>
+          </div>
+        )}
+
+        {chatSidebarOpen ? (
+          <>
+            {/* New chat button */}
+            <div className="px-3 mb-2">
+              <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setExpandOrder({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full font-semibold"
+                style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 48, fontSize: 16, fontWeight: 600 }}>
+                + New Chat
+              </button>
+            </div>
+            {/* Search */}
+            <div className="px-3 mb-2">
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
+                className="w-full px-3 py-2 focus:outline-none"
+                style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#f8f6ee", fontSize: 15 }} />
+            </div>
+            {/* Conversation list */}
+            <div className="flex-1 overflow-y-auto px-1.5">
+              {searchResults !== null ? (
+                searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "var(--text-muted-dark)" }}>No conversations found</div> : (
+                  searchResults.map((c: Conversation & { snippet?: string }) => (
+                    <button key={c.id} onClick={() => { loadConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
+                      className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)", minHeight: 44 }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <div className="text-xs truncate">{c.title}</div>
+                      {c.snippet && <div className="text-xs truncate mt-0.5" style={{ color: "rgba(248,246,238,0.35)" }}>{c.snippet.substring(0, 80)}</div>}
+                    </button>
+                  ))
+                )
+              ) : (
+                groupByDate(conversations).map(group => (
+                  <div key={group.label} className="mb-2">
+                    <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider sticky top-0" style={{ color: "var(--text-muted-dark)", background: "#161616", zIndex: 1, borderTop: group.label === "Pinned" ? "none" : "1px solid rgba(255,255,255,0.04)" }}>{group.label}</div>
+                    {group.items.map(c => {
+                      const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
+                      const isActive = c.id === activeConvId;
+                      return (
+                        <div key={c.id} className="group relative flex items-center px-1.5 mb-0.5">
+                          <button onClick={() => { if (renamingId === c.id) return; loadConversation(c.id); }}
+                            className="flex-1 text-left px-2 py-2 transition-all" style={{
+                              borderRadius: 6, border: "none", cursor: "pointer",
+                              background: isActive ? "rgba(204,138,57,0.15)" : "transparent",
+                              borderLeft: isActive ? "2px solid #CC8A39" : "2px solid transparent",
+                              color: "rgba(248,246,238,0.85)",
+                            }}
+                            onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                            onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
+                            {renamingId === c.id ? (
+                              <input autoFocus value={renameText} onChange={e => setRenameText(e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                onBlur={() => { if (renameText.trim()) renameConversation(c.id, renameText.trim()); else setRenamingId(null); }}
+                                onKeyDown={e => { if (e.key === "Enter" && renameText.trim()) renameConversation(c.id, renameText.trim()); if (e.key === "Escape") setRenamingId(null); }}
+                                className="w-full text-xs bg-transparent focus:outline-none" style={{ color: "rgba(248,246,238,0.85)", borderBottom: "1px solid #CC8A39" }} />
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
+                                <span className="truncate" style={{ maxWidth: 160, fontSize: 15, color: "#f8f6ee" }}>{c.title}</span>
+                                {c.pinned && <span style={{ fontSize: 9, color: "#CC8A39" }}>&#x1F4CC;</span>}
+                                {(bgStreaming.has(c.id) || (streamingConvRef.current === c.id && streaming)) && (
+                                  <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "#CC8A39", flexShrink: 0 }} />
+                                )}
+                              </div>
+                            )}
+                          </button>
+                          {/* Hover actions */}
+                          <div className={`absolute right-2 top-1/2 -translate-y-1/2 ${c.pinned ? "flex" : "hidden group-hover:flex"}`} style={{ gap: 4, background: "#161616", borderRadius: 4, padding: "2px" }}>
+                            <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameText(c.title); }} title="Rename" aria-label={`Rename ${c.title}`}
+                              style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                              onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#9998;</button>
+                            <button onClick={(e) => { e.stopPropagation(); pinConversation(c.id, !c.pinned); }} title={c.pinned ? "Unpin" : "Pin"} aria-label={`${c.pinned ? "Unpin" : "Pin"} ${c.title}`}
+                              style={{ background: "none", border: "none", color: c.pinned ? "#CC8A39" : "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                              onMouseEnter={e => { if (!c.pinned) e.currentTarget.style.color = "#f8f6ee"; }} onMouseLeave={e => { if (!c.pinned) e.currentTarget.style.color = "rgba(248,246,238,0.7)"; }}>&#x1F4CC;</button>
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteConv(c.id); }} title="Delete" aria-label={`Delete ${c.title}`}
+                              style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                              onMouseEnter={e => e.currentTarget.style.color = "#ff6b6b"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#x1F5D1;</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+            {/* Profile row + popover */}
+            <div ref={profileMenuRef} className="shrink-0 relative" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              {/* Profile popover — opens upward */}
+              {profileMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
+                  {/* Preferences */}
+                  <div style={{ padding: "12px 16px" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>I usually use Wyle for</div>
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
+                        <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
+                          style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: chatMode === m ? "#CC8A39" : "rgba(22,22,22,0.06)", color: chatMode === m ? "#161616" : "var(--color-onyx)", fontWeight: chatMode === m ? 600 : 400 }}>
+                          {MODE_LABELS[m]}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default view</div>
+                    <div className="flex gap-1 mb-1">
+                      {(["client", "research"] as InteractionMode[]).map(v => (
+                        <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
+                          style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
+                          {v === "client" ? "Client Interaction" : "Internal Research"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }} />
+                  {/* Actions */}
+                  <div style={{ padding: "8px 0" }}>
+                    {isAdminUser && <a href="/admin" style={{ display: "block", padding: "8px 16px", fontSize: 14, color: "var(--color-olive)", textDecoration: "none" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      Admin Panel
+                    </a>}
+                    <button onClick={() => { setProfileMenuOpen(false); setConfirmClearAll(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      Clear History
+                    </button>
+                    <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* Profile row trigger */}
+              <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
+                style={{ padding: "12px 16px", height: 56, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
+                  {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                    {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
+                    {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
+                  </div>
+                </div>
+                <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Collapsed conversation list — mode badge initials only */}
+            <div className="flex-1 overflow-y-auto" style={{ padding: "4px 0" }}>
+              {conversations.slice(0, 20).map(c => {
+                const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
+                const isActive = c.id === activeConvId;
+                return (
+                  <button key={c.id} onClick={() => loadConversation(c.id)} title={c.title} aria-label={c.title}
+                    style={{ width: 48, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? "rgba(204,138,57,0.15)" : "transparent", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isActive ? "rgba(204,138,57,0.15)" : "transparent"; }}>
+                    <span style={{ fontSize: 9, padding: "2px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Collapsed profile — just initial avatar */}
+            <div className="shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "center", padding: "10px 0" }}>
+              <button onClick={() => { setChatSidebarOpen(true); setTimeout(() => setProfileMenuOpen(true), 250); }} aria-label="Open profile"
+                style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#f8f6ee", border: "none", cursor: "pointer" }}>
+                {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
+              </button>
+            </div>
+          </>
+        )}
+      </nav>
+
+      {/* Mobile sidebar overlay backdrop */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileMenuOpen(false)} role="presentation" />
+      )}
+
+      {/* ── RIGHT ZONE — Main content ── */}
+      <div className="flex-1 flex flex-col overflow-hidden sidebar-transition">
+        {/* Right zone top bar — tabs only */}
+        <div className="shrink-0 flex items-center" style={{ height: 52, background: "var(--bg-content)", borderBottom: "1px solid rgba(0,0,0,0.08)", paddingLeft: 16 }}>
+          {/* Mobile hamburger */}
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Open conversation menu" className="hide-desktop"
+            style={{ background: "none", border: "none", color: "var(--color-onyx)", cursor: "pointer", padding: 8, marginRight: 8 }}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 20, height: 20 }}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+          </button>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <button onClick={() => setActiveTab("chat")}
+              style={{ fontSize: 15, fontWeight: 500, padding: "6px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s ease",
+                background: activeTab === "chat" ? "#161616" : "transparent",
+                color: activeTab === "chat" ? "#f8f6ee" : "#777" }}>
               Chat
             </button>
             {isKbUser && (
-              <button onClick={() => setActiveTab("kb")} className="px-3 py-1.5 text-xs font-medium transition-all"
-                style={{ borderRadius: "6px", background: activeTab === "kb" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "kb" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
+              <button onClick={() => setActiveTab("kb")}
+                style={{ fontSize: 15, fontWeight: 500, padding: "6px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s ease",
+                  background: activeTab === "kb" ? "#161616" : "transparent",
+                  color: activeTab === "kb" ? "#f8f6ee" : "#777" }}>
                 Knowledge Base
               </button>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-        </div>
-      </header>
 
-      {/* ── Chat tab ── */}
-      {activeTab === "chat" && (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Chat sidebar */}
-          <nav ref={sidebarRef} aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
-            style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
-            onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
-            onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
-            onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
-            {/* Sidebar header — logo + collapse in one row */}
-            <div className="shrink-0 flex items-center justify-between" style={{ height: 64, padding: "0 16px" }}>
-              {chatSidebarOpen ? (
-                <div className="flex items-center gap-3">
-                  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 40, height: 40, flexShrink: 0 }} aria-hidden="true">
-                    <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
-                    <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
-                    <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
-                  </svg>
-                  <span style={{ fontSize: 20, fontWeight: 600, color: "#f8f6ee", fontFamily: "var(--font-heading)" }}>Wyle</span>
-                </div>
-              ) : (
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 32, height: 32, margin: "0 auto" }} aria-hidden="true">
-                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
-                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
-                </svg>
-              )}
-              {chatSidebarOpen && (
-                <div className="flex items-center gap-1">
-                  {mobileMenuOpen && (
-                    <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="hide-desktop"
-                      style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6 }}>
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                  <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} aria-label="Collapse sidebar" className="hide-mobile"
-                    style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6 }}>
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                  </button>
-                </div>
-              )}
-              {!chatSidebarOpen && (
-                <button onClick={() => setChatSidebarOpen(true)} aria-label="Expand sidebar" className="hide-mobile"
-                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6, position: "absolute", top: 68, left: 12 }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: "rotate(180deg)" }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                </button>
-              )}
-            </div>
-            {chatSidebarOpen && (
-              <>
-                {/* New chat button */}
-                <div className="px-3 mb-2">
-                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full font-semibold"
-                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 48, fontSize: 16, fontWeight: 600 }}>
-                    + New Chat
-                  </button>
-                </div>
-                {/* Search */}
-                <div className="px-3 mb-2">
-                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
-                    className="w-full px-3 py-2 focus:outline-none"
-                    style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#f8f6ee", fontSize: 15 }} />
-                </div>
-                {/* Conversation list */}
-                <div className="flex-1 overflow-y-auto px-1.5">
-                  {searchResults !== null ? (
-                    searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "var(--text-muted-dark)" }}>No conversations found</div> : (
-                      searchResults.map((c: Conversation & { snippet?: string }) => (
-                        <button key={c.id} onClick={() => { loadConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
-                          className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)", minHeight: 44 }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div className="text-xs truncate">{c.title}</div>
-                          {c.snippet && <div className="text-xs truncate mt-0.5" style={{ color: "rgba(248,246,238,0.35)" }}>{c.snippet.substring(0, 80)}</div>}
-                        </button>
-                      ))
-                    )
-                  ) : (
-                    groupByDate(conversations).map(group => (
-                      <div key={group.label} className="mb-2">
-                        <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider sticky top-0" style={{ color: "var(--text-muted-dark)", background: "#161616", zIndex: 1, borderTop: group.label === "Pinned" ? "none" : "1px solid rgba(255,255,255,0.04)" }}>{group.label}</div>
-                        {group.items.map(c => {
-                          const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
-                          const isActive = c.id === activeConvId;
-                          return (
-                            <div key={c.id} className="group relative flex items-center px-1.5 mb-0.5">
-                              <button onClick={() => { if (renamingId === c.id) return; loadConversation(c.id); }}
-                                className="flex-1 text-left px-2 py-2 transition-all" style={{
-                                  borderRadius: 6, border: "none", cursor: "pointer",
-                                  background: isActive ? "rgba(204,138,57,0.15)" : "transparent",
-                                  borderLeft: isActive ? "2px solid #CC8A39" : "2px solid transparent",
-                                  color: "rgba(248,246,238,0.85)",
-                                }}
-                                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
-                                {renamingId === c.id ? (
-                                  <input autoFocus value={renameText} onChange={e => setRenameText(e.target.value)}
-                                    onClick={e => e.stopPropagation()}
-                                    onBlur={() => { if (renameText.trim()) renameConversation(c.id, renameText.trim()); else setRenamingId(null); }}
-                                    onKeyDown={e => { if (e.key === "Enter" && renameText.trim()) renameConversation(c.id, renameText.trim()); if (e.key === "Escape") setRenamingId(null); }}
-                                    className="w-full text-xs bg-transparent focus:outline-none" style={{ color: "rgba(248,246,238,0.85)", borderBottom: "1px solid #CC8A39" }} />
-                                ) : (
-                                  <div className="flex items-center gap-1.5">
-                                    <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
-                                    <span className="truncate" style={{ maxWidth: 160, fontSize: 15, color: "#f8f6ee" }}>{c.title}</span>
-                                    {c.pinned && <span style={{ fontSize: 9, color: "#CC8A39" }}>&#x1F4CC;</span>}
-                                    {(bgStreaming.has(c.id) || (streamingConvRef.current === c.id && streaming)) && (
-                                      <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "#CC8A39", flexShrink: 0 }} />
-                                    )}
-                                  </div>
-                                )}
-                              </button>
-                              {/* Hover actions */}
-                              <div className={`absolute right-2 top-1/2 -translate-y-1/2 ${c.pinned ? "flex" : "hidden group-hover:flex"}`} style={{ gap: 4, background: "#161616", borderRadius: 4, padding: "2px" }}>
-                                <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameText(c.title); }} title="Rename" aria-label={`Rename ${c.title}`}
-                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
-                                  onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#9998;</button>
-                                <button onClick={(e) => { e.stopPropagation(); pinConversation(c.id, !c.pinned); }} title={c.pinned ? "Unpin" : "Pin"} aria-label={`${c.pinned ? "Unpin" : "Pin"} ${c.title}`}
-                                  style={{ background: "none", border: "none", color: c.pinned ? "#CC8A39" : "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
-                                  onMouseEnter={e => { if (!c.pinned) e.currentTarget.style.color = "#f8f6ee"; }} onMouseLeave={e => { if (!c.pinned) e.currentTarget.style.color = "rgba(248,246,238,0.7)"; }}>&#x1F4CC;</button>
-                                <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteConv(c.id); }} title="Delete" aria-label={`Delete ${c.title}`}
-                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
-                                  onMouseEnter={e => e.currentTarget.style.color = "#ff6b6b"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#x1F5D1;</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
-                </div>
-                {/* Profile row + popover */}
-                <div ref={profileMenuRef} className="shrink-0 relative" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  {/* Profile popover — opens upward */}
-                  {profileMenuOpen && (
-                    <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
-                      {/* Preferences */}
-                      <div style={{ padding: "12px 16px" }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>I usually use Wyle for</div>
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
-                            <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
-                              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: chatMode === m ? "#CC8A39" : "rgba(22,22,22,0.06)", color: chatMode === m ? "#161616" : "var(--color-onyx)", fontWeight: chatMode === m ? 600 : 400 }}>
-                              {MODE_LABELS[m]}
-                            </button>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default view</div>
-                        <div className="flex gap-1 mb-1">
-                          {(["client", "research"] as InteractionMode[]).map(v => (
-                            <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
-                              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
-                              {v === "client" ? "Client Interaction" : "Internal Research"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }} />
-                      {/* Actions */}
-                      <div style={{ padding: "8px 0" }}>
-                        {isKbUser && <a href="/admin" style={{ display: "block", padding: "8px 16px", fontSize: 14, color: "var(--color-olive)", textDecoration: "none" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          {isAdminUser ? "Admin Panel" : "Knowledge Base"}
-                        </a>}
-                        <button onClick={() => { setProfileMenuOpen(false); setConfirmClearAll(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          Clear History
-                        </button>
-                        <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          Sign Out
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Profile row trigger */}
-                  <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
-                    style={{ padding: "12px 16px", height: 56, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
-                      {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
-                        {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
-                        {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
-                      </div>
-                    </div>
-                    <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </nav>
-
-          {/* Mobile sidebar overlay backdrop */}
-          {mobileMenuOpen && (
-            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileMenuOpen(false)} role="presentation" />
-          )}
-
-          {/* Chat content */}
-          <div role="main" className="flex-1 flex flex-col overflow-hidden"
+        {/* ── Chat tab content ── */}
+        {activeTab === "chat" && (
+          <div className="flex-1 flex flex-col overflow-hidden"
             onTouchStart={e => { if (e.touches[0].clientX < 30) touchStartX.current = e.touches[0].clientX; else touchStartX.current = null; }}
             onTouchEnd={e => { if (touchStartX.current !== null && touchStartX.current < 30) { const endX = e.changedTouches[0].clientX; if (endX - touchStartX.current > 80) setMobileMenuOpen(true); } touchStartX.current = null; }}>
-          {/* Interaction mode toggle — fixed at top center */}
+          {/* Interaction mode toggle */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
             <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
               <button onClick={() => setInteractionMode("client")}
@@ -1302,8 +1364,8 @@ ${context}`;
               </button>
             </div>
           </div>
-          <div ref={chatScrollRef} role="log" aria-live="polite" aria-label="Conversation messages" className="flex-1 overflow-y-auto px-4 py-6"
-            style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}
+          <div ref={chatScrollRef} role="log" aria-live="polite" aria-label="Conversation messages" className="flex-1 overflow-y-auto py-6 chat-content-container"
+            style={{ width: "100%" }}
             onScroll={e => {
               const el = e.currentTarget;
               const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
@@ -1379,7 +1441,7 @@ ${context}`;
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
                       msgInteractionMode={msg.interactionMode || "client"} draftLabel={msg.draftLabel}
                       isError={msg.isError} onRetry={msg.isError ? () => { const prevMsg = messages[i-1]; setMessages(prev => prev.filter((_, idx) => idx !== i)); if (prevMsg?.role === "user") { const txt = typeof prevMsg.content === "string" ? prevMsg.content : ""; setTimeout(() => sendMessage(txt), 100); } } : undefined}
-                      inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
+                      inlineExpanded={inlineExpanded[i] || {}} sectionOrder={expandOrder[i] || []} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
@@ -1426,7 +1488,7 @@ ${context}`;
           )}
           {/* Input area */}
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
-            <div style={{ maxWidth: 860, margin: "0 auto" }}>
+            <div className="chat-content-container" style={{ margin: "0 auto" }}>
               {pendingFiles.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-start gap-2">
                   {pendingFiles.map((f, idx) => (
@@ -1487,8 +1549,155 @@ ${context}`;
             </div>
           </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── Knowledge Base tab ── */}
+        {activeTab === "kb" && isKbUser && (
+          <div className="flex-1 flex overflow-hidden">
+            {/* KB Sidebar: Source Files */}
+            <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>
+              <div className="shrink-0 flex items-center justify-between px-3 py-3">
+                {sidebarOpen && <h2 className="text-sm font-semibold" style={{ color: "var(--color-cream)", fontFamily: "var(--font-heading)" }}>Source Files</h2>}
+                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex items-center justify-center" style={{ width: 24, height: 24, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-cream)", marginLeft: sidebarOpen ? 0 : "auto", marginRight: sidebarOpen ? 0 : "auto" }}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4" style={{ transform: sidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+              </div>
+              {sidebarOpen && (
+                <div className="flex-1 overflow-y-auto">
+                  {kbFilesLoading ? (
+                    <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
+                  ) : kbFiles.length === 0 ? (
+                    <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
+                  ) : (
+                    kbFiles.map(file => (
+                      <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-3 transition-all"
+                        style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                        onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                        onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
+                        <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
+                        <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Editor + Chat to edit — side by side */}
+            <div className="flex-1 flex flex-col min-w-0">
+              {/* Top bar: Update Wyle's Knowledge + Rewrite Log */}
+              <div className="shrink-0 flex items-start justify-between px-5 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Recent Rewrites</div>
+                  {logLoading ? (
+                    <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>Loading...</div>
+                  ) : logEntries.length === 0 ? (
+                    <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>No rewrite history</div>
+                  ) : (
+                    logEntries.slice(0, 5).map((entry, i) => (
+                      <div key={i} className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.6" }}>
+                        {new Date(entry.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        {" "}<span style={{ color: "rgba(22,22,22,0.3)" }}>{entry.trigger}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <button onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
+                  className="shrink-0 disabled:opacity-50"
+                  style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                  {rewriting ? <span className="flex items-center gap-2"><Spinner size={14} color="#161616" /> Updating...</span> : "Update Wyle's Knowledge"}
+                </button>
+              </div>
+
+              {/* Editor content */}
+              <div className="flex-1 flex min-w-0 overflow-hidden">
+              {!selectedFile ? (
+                <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a file from the sidebar to view and edit it</p></div>
+              ) : editorLoading ? (
+                <div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
+              ) : (
+                <>
+                  {/* Left column: Chat to edit (40%) */}
+                  <div className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
+                    <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                      <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-3">
+                      {editChatHistory.length === 0 && !editStreaming && <p className="text-xs text-center py-4" style={{ color: "rgba(22,22,22,0.3)" }}>Ask Claude to make changes to this file</p>}
+                      {editChatHistory.map((msg, i) => (
+                        <div key={i} className={`mb-2 ${msg.role === "user" ? "flex justify-end" : ""}`}>
+                          {msg.role === "user" ? (
+                            <div className="inline-block max-w-[85%] px-3 py-1.5 text-xs" style={{ background: "var(--color-bark)", borderRadius: "10px 10px 2px 10px", color: "var(--color-cream)" }}>{msg.text}</div>
+                          ) : (
+                            <div className="text-xs" style={{ color: "rgba(22,22,22,0.55)" }}>{msg.text}</div>
+                          )}
+                        </div>
+                      ))}
+                      {editStreaming && <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--color-mustard)" }}><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />Editing file...</div>}
+                      <div ref={editChatEndRef} />
+                    </div>
+                    <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                      <div className="flex gap-2">
+                        <input className="flex-1 px-3 py-2 text-xs focus:outline-none transition-all"
+                          style={{ borderRadius: "8px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)" }}
+                          onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                          placeholder="Ask Claude to update this file..." value={editChatInput} onChange={e => setEditChatInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendEditChat(); } }} disabled={editStreaming} />
+                        <button onClick={sendEditChat} disabled={editStreaming || !editChatInput.trim()} className="px-3 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
+                          style={{ borderRadius: "8px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>Send</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right column: File content (60%) */}
+                  <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)" }}>
+                      <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
+                    </div>
+                    {(pendingDiff || editStreaming) && (
+                      <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "rgba(60,59,34,0.06)", borderBottom: "1px solid rgba(22,22,22,0.08)" }}>
+                        <span className="text-xs font-medium" style={{ color: "var(--color-olive)" }}>{editStreaming ? "Generating changes..." : "Review suggested changes before saving"}</span>
+                        {pendingDiff && !editStreaming && (
+                          <div className="flex gap-2">
+                            <button onClick={rejectAllChanges} className="px-3 py-1 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Reject All</button>
+                            <button onClick={acceptAllChanges} disabled={saving} className="px-3 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
+                              style={{ borderRadius: "6px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Accept All Changes"}</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {pendingDiff || editStreaming ? (
+                      <div className="flex-1 p-4 overflow-auto" style={{ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "1.6", color: "var(--color-onyx)", background: "rgba(248,246,238,0.8)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                        dangerouslySetInnerHTML={{ __html: renderDiff(pendingDiff || "") }} />
+                    ) : (
+                      <textarea value={editorContent} onChange={e => setEditorContent(e.target.value)} className="flex-1 w-full p-4 resize-none focus:outline-none"
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "1.6", color: "var(--color-onyx)", background: "rgba(248,246,238,0.8)", border: "none", overflow: "auto" }} spellCheck={false} />
+                    )}
+                    {/* Bottom bar: Save/Cancel */}
+                    <div className="shrink-0 flex items-center justify-end gap-2 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
+                      {!pendingDiff && !editStreaming && (
+                        <>
+                          <button onClick={cancelEdit} className="px-3 py-1.5 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Cancel</button>
+                          <button onClick={saveFile} disabled={saving || editorContent === editorOriginal} className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
+                            style={{ borderRadius: "6px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Save"}</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>{/* end RIGHT ZONE */}
 
       {/* Delete conversation confirm */}
       {confirmDeleteConv && (
@@ -1517,158 +1726,6 @@ ${context}`;
           </div>
         </div>
       )}
-
-      {/* ── Knowledge Base tab ── */}
-      {activeTab === "kb" && isKbUser && (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar: Source Files */}
-          <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>
-            <div className="shrink-0 flex items-center justify-between px-3 py-3">
-              {sidebarOpen && <h2 className="text-sm font-semibold" style={{ color: "var(--color-cream)", fontFamily: "var(--font-heading)" }}>Source Files</h2>}
-              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex items-center justify-center" style={{ width: 24, height: 24, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-cream)", marginLeft: sidebarOpen ? 0 : "auto", marginRight: sidebarOpen ? 0 : "auto" }}>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4" style={{ transform: sidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1 overflow-y-auto">
-                {kbFilesLoading ? (
-                  <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-                ) : kbFiles.length === 0 ? (
-                  <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
-                ) : (
-                  kbFiles.map(file => (
-                    <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-3 transition-all"
-                      style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-                      onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                      onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
-                      <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
-                      <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Editor + Chat to edit — side by side */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Top bar: Update Wyle's Knowledge + Rewrite Log */}
-            <div className="shrink-0 flex items-start justify-between px-5 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Recent Rewrites</div>
-                {logLoading ? (
-                  <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>Loading...</div>
-                ) : logEntries.length === 0 ? (
-                  <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>No rewrite history</div>
-                ) : (
-                  logEntries.slice(0, 5).map((entry, i) => (
-                    <div key={i} className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.6" }}>
-                      {new Date(entry.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                      {" "}<span style={{ color: "rgba(22,22,22,0.3)" }}>{entry.trigger}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              <button onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
-                className="shrink-0 disabled:opacity-50"
-                style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                {rewriting ? <span className="flex items-center gap-2"><Spinner size={14} color="#161616" /> Updating...</span> : "Update Wyle's Knowledge"}
-              </button>
-            </div>
-
-            {/* Editor content */}
-            <div className="flex-1 flex min-w-0 overflow-hidden">
-            {!selectedFile ? (
-              <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a file from the sidebar to view and edit it</p></div>
-            ) : editorLoading ? (
-              <div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-            ) : (
-              <>
-                {/* Left column: Chat to edit (40%) */}
-                <div className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
-                  <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-                    <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
-                  </div>
-                  <div className="flex-1 overflow-y-auto px-4 py-3">
-                    {editChatHistory.length === 0 && !editStreaming && <p className="text-xs text-center py-4" style={{ color: "rgba(22,22,22,0.3)" }}>Ask Claude to make changes to this file</p>}
-                    {editChatHistory.map((msg, i) => (
-                      <div key={i} className={`mb-2 ${msg.role === "user" ? "flex justify-end" : ""}`}>
-                        {msg.role === "user" ? (
-                          <div className="inline-block max-w-[85%] px-3 py-1.5 text-xs" style={{ background: "var(--color-bark)", borderRadius: "10px 10px 2px 10px", color: "var(--color-cream)" }}>{msg.text}</div>
-                        ) : (
-                          <div className="text-xs" style={{ color: "rgba(22,22,22,0.55)" }}>{msg.text}</div>
-                        )}
-                      </div>
-                    ))}
-                    {editStreaming && <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--color-mustard)" }}><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />Editing file...</div>}
-                    <div ref={editChatEndRef} />
-                  </div>
-                  <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-                    <div className="flex gap-2">
-                      <input className="flex-1 px-3 py-2 text-xs focus:outline-none transition-all"
-                        style={{ borderRadius: "8px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)" }}
-                        onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
-                        onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
-                        placeholder="Ask Claude to update this file..." value={editChatInput} onChange={e => setEditChatInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendEditChat(); } }} disabled={editStreaming} />
-                      <button onClick={sendEditChat} disabled={editStreaming || !editChatInput.trim()} className="px-3 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
-                        style={{ borderRadius: "8px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>Send</button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right column: File content (60%) */}
-                <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
-                  <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)" }}>
-                    <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
-                  </div>
-                  {(pendingDiff || editStreaming) && (
-                    <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "rgba(60,59,34,0.06)", borderBottom: "1px solid rgba(22,22,22,0.08)" }}>
-                      <span className="text-xs font-medium" style={{ color: "var(--color-olive)" }}>{editStreaming ? "Generating changes..." : "Review suggested changes before saving"}</span>
-                      {pendingDiff && !editStreaming && (
-                        <div className="flex gap-2">
-                          <button onClick={rejectAllChanges} className="px-3 py-1 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Reject All</button>
-                          <button onClick={acceptAllChanges} disabled={saving} className="px-3 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
-                            style={{ borderRadius: "6px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Accept All Changes"}</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {pendingDiff || editStreaming ? (
-                    <div className="flex-1 p-4 overflow-auto" style={{ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "1.6", color: "var(--color-onyx)", background: "rgba(248,246,238,0.8)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                      dangerouslySetInnerHTML={{ __html: renderDiff(pendingDiff || "") }} />
-                  ) : (
-                    <textarea value={editorContent} onChange={e => setEditorContent(e.target.value)} className="flex-1 w-full p-4 resize-none focus:outline-none"
-                      style={{ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "1.6", color: "var(--color-onyx)", background: "rgba(248,246,238,0.8)", border: "none", overflow: "auto" }} spellCheck={false} />
-                  )}
-                  {/* Bottom bar: Save/Cancel */}
-                  <div className="shrink-0 flex items-center justify-end gap-2 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-                    {!pendingDiff && !editStreaming && (
-                      <>
-                        <button onClick={cancelEdit} className="px-3 py-1.5 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Cancel</button>
-                        <button onClick={saveFile} disabled={saving || editorContent === editorOriginal} className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
-                          style={{ borderRadius: "6px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Save"}</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Footer ── */}
-      <footer className="shrink-0 flex items-center justify-center" style={{ height: 40, background: "var(--bg-footer)", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-xs" style={{ color: "rgba(237,233,225,0.4)" }}>Wyle — Freewyld Foundry Internal Tool</p>
-      </footer>
 
       {/* Toast */}
       {toast && <div role="status" aria-live="polite" className="fixed bottom-14 right-6 px-4 py-2.5 text-sm font-medium shadow-lg toast-enter" style={{ borderRadius: "10px", background: "var(--color-onyx)", color: "var(--color-cream)", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>{toast}</div>}
