@@ -27,6 +27,9 @@ export async function POST() {
       )
     `;
 
+    // Add tour column
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS tour_completed BOOLEAN NOT NULL DEFAULT false`;
+
     // Create index
     await sql`CREATE INDEX IF NOT EXISTS users_email_idx ON users(email)`;
 

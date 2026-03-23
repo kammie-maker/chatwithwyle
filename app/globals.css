@@ -76,6 +76,12 @@ html { scroll-behavior: smooth; }
 @keyframes avatarPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .avatar-streaming { animation: avatarPulse 2s ease-in-out infinite; }
 
+/* ── Tour ── */
+.tour-spotlight-target { position: relative !important; z-index: 10001 !important; }
+.tour-backdrop { position: fixed; inset: 0; z-index: 10000; }
+@keyframes tourFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.tour-tooltip-enter { animation: tourFadeIn 0.2s ease; }
+
 /* ── Buttons — WCAG sizing ── */
 .btn-primary {
   background: var(--color-mustard); color: var(--color-onyx); border: none; border-radius: 8px;

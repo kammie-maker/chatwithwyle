@@ -61,6 +61,10 @@ async function migrate() {
   `;
   console.log("✓ users table created");
 
+  // Add tour_completed column (safe to run multiple times)
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS tour_completed BOOLEAN NOT NULL DEFAULT false`;
+  console.log("✓ tour_completed column added");
+
   // indexes
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(user_id, updated_at DESC)`;

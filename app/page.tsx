@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import GuideContent from "./guide/GuideContent";
+import { useTour } from "./contexts/TourContext";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -656,6 +657,15 @@ export default function Home() {
   }, [messages, userScrolledUp]);
   useEffect(() => { activeConvRef.current = activeConvId; }, [activeConvId]);
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
+
+  // Tour action bridge
+  const { tourAction, clearTourAction, startTour: replayTour } = useTour();
+  useEffect(() => {
+    if (!tourAction) return;
+    if (tourAction.setActiveTab) setActiveTab(tourAction.setActiveTab as Tab);
+    if (tourAction.ensureSidebarOpen) setChatSidebarOpen(true);
+    clearTourAction();
+  }, [tourAction, clearTourAction]);
   useEffect(() => {
     function handleClick(e: MouseEvent) { if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false); }
     if (modeDropdownOpen) document.addEventListener("mousedown", handleClick);
@@ -1247,14 +1257,14 @@ ${context}`;
         {chatSidebarOpen ? (
           <>
             {/* New chat button */}
-            <div style={{ margin: "12px 12px 8px 12px" }}>
+            <div data-tour="new-chat" style={{ margin: "12px 12px 8px 12px" }}>
               <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setExpandOrder({}); setMobileMenuOpen(false); }} aria-label="Start new conversation"
                 style={{ width: "100%", borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 40, fontSize: 14, fontWeight: 600, padding: "0 16px" }}>
                 + New Chat
               </button>
             </div>
             {/* Guide link */}
-            <button onClick={() => setActiveTab("guide")}
+            <button data-tour="guide-link" onClick={() => setActiveTab("guide")}
               style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, width: "calc(100% - 24px)",
                 background: activeTab === "guide" ? "rgba(204,138,57,0.15)" : "transparent",
                 borderLeft: activeTab === "guide" ? "2px solid #CC8A39" : "2px solid transparent",
@@ -1272,7 +1282,7 @@ ${context}`;
                 style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#f8f6ee", fontSize: 15 }} />
             </div>
             {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto px-1.5">
+            <div data-tour="conversation-list" className="flex-1 overflow-y-auto px-1.5">
               {searchResults !== null ? (
                 searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "var(--text-muted-dark)" }}>No conversations found</div> : (
                   searchResults.map((c: Conversation & { snippet?: string }) => (
@@ -1375,6 +1385,10 @@ ${context}`;
                       onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                       Clear History
                     </button>
+                    <button onClick={() => { setProfileMenuOpen(false); replayTour(); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "#555", background: "none", border: "none", cursor: "pointer" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <span style={{ fontSize: 10 }}>&#9654;</span> Replay Tour
+                    </button>
                     <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
                       onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                       Sign Out
@@ -1383,7 +1397,7 @@ ${context}`;
                 </div>
               )}
               {/* Profile row trigger */}
-              <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
+              <button data-tour="profile-row" onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
                 style={{ padding: "12px 16px", height: 56, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
                 onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
@@ -1450,7 +1464,7 @@ ${context}`;
               Chat
             </button>
             {isKbUser && (
-              <button onClick={() => setActiveTab("kb")}
+              <button data-tour="kb-tab" onClick={() => setActiveTab("kb")}
                 style={{ fontSize: 15, fontWeight: 500, padding: "6px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s ease",
                   background: activeTab === "kb" ? "#161616" : "transparent",
                   color: activeTab === "kb" ? "#f8f6ee" : "#777" }}>
@@ -1467,7 +1481,7 @@ ${context}`;
             onTouchEnd={e => { if (touchStartX.current !== null && touchStartX.current < 30) { const endX = e.changedTouches[0].clientX; if (endX - touchStartX.current > 80) setMobileMenuOpen(true); } touchStartX.current = null; }}>
           {/* Interaction mode toggle */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
-            <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
+            <div data-tour="interaction-toggle" style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
               <button onClick={() => switchInteractionMode("client")}
                 style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
                   background: interactionMode === "client" ? "#3c3b22" : "transparent",
@@ -1516,7 +1530,7 @@ ${context}`;
                 </svg>
                 <h2 className="text-base font-semibold mb-1" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
                 <p className="text-xs mb-4" style={{ color: "var(--text-muted)", maxWidth: 360, margin: "0 auto" }}>Ask about Freewyld Foundry sales, clients, pricing, or processes.</p>
-                <div className="text-left" style={{ maxWidth: 600, margin: "0 auto" }}>
+                <div data-tour="suggested-questions" className="text-left" style={{ maxWidth: 600, margin: "0 auto" }}>
                   {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((group, gi) => (
                     <div key={gi} style={{ marginTop: gi > 0 ? 16 : 0 }}>
                       <div style={{ fontSize: 12, letterSpacing: 2, color: "var(--text-muted)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase" }}>{group.label}</div>
@@ -1603,7 +1617,7 @@ ${context}`;
             </button>
           )}
           {/* Input area */}
-          <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
+          <div data-tour="input-area" className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
             <div className="chat-content-container" style={{ margin: "0 auto" }}>
               {pendingFiles.length > 0 && (
                 <div className="mb-2 flex flex-wrap items-start gap-2">
@@ -1622,7 +1636,7 @@ ${context}`;
               )}
               <div className="flex gap-2 items-end">
                 {/* Mode selector */}
-                <div className="relative shrink-0" ref={modeDropdownRef}>
+                <div className="relative shrink-0" ref={modeDropdownRef} data-tour="mode-selector">
                   <button onClick={() => setModeDropdownOpen(!modeDropdownOpen)} className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium transition-all"
                     style={{ borderRadius: "10px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer", minHeight: 44, whiteSpace: "nowrap" }}>
                     <span className="hidden sm:inline">{MODE_LABELS[chatMode]}</span>
