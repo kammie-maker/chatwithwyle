@@ -154,7 +154,7 @@ Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No e
 
 Follow the active Format and Skill file rules exactly.`;
 
-const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — INTERNAL RESEARCH MODE:
+const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — STRATEGY MODE:
 
 You are speaking directly to the Freewyld team member. Write coaching, strategy, context, and analysis.
 
@@ -205,7 +205,7 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
   if (formatContent) parts.push("=== RESPONSE FORMAT ===\n" + formatContent);
 
   if (interactionMode === "research") {
-    parts.push("OVERRIDE: Internal Research mode. All sections speak to the rep in coaching voice. No client-facing scripts. Omit REP NOTES section.");
+    parts.push("OVERRIDE: Strategy Mode. All sections speak to the rep in coaching voice. No client-facing scripts. Omit REP NOTES section.");
   }
 
   // 6. Knowledge files for this mode

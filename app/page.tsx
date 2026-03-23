@@ -208,6 +208,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   const isResearch = msgInteractionMode === "research";
   const isDraft = !!draftLabel && (draftLabel.startsWith("Draft") || draftLabel === "Slack Draft");
   const isRecontextualize = draftLabel === "recontextualize";
+  const isStrategyToClient = draftLabel === "strategy-to-client";
 
   // For recontextualize messages, split on --- divider ONLY after streaming completes
   let recontextPreamble = "";
@@ -221,7 +222,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   }
 
   const parsed = parseResponse(isStreaming && isRecontextualize ? "" : mainText);
-  const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
+  const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken || isStrategyToClient);
 
   // Clean content: strip "---" horizontal rules and meta-commentary
   function clean(s: string) {
@@ -355,8 +356,8 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
           {/* Action buttons */}
           {showPills && !expandLoading && (
-            <div className="flex flex-wrap mt-2" style={{ gap: isResearch ? 16 : 8 }}>
-              {isResearch ? (
+            <div className="flex flex-wrap mt-2" style={{ gap: isResearch && !isStrategyToClient ? 16 : 8 }}>
+              {isResearch && !isStrategyToClient ? (
                 <button onClick={() => onDraft("Draft Slack to Team")}
                   style={{ background: "none", border: "none", padding: 0, fontSize: 14, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
                   onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
@@ -755,7 +756,7 @@ Then output exactly this on its own line:
 
 Then immediately answer the most recent question from the conversation as ${MODE_LABELS[newMode]}, following ALL formatting rules exactly as if this were a fresh response in ${MODE_LABELS[newMode]}:
 - Start with ## SIMPLE
-- Write the SIMPLE section as a direct word-for-word client-facing script (or rep-facing if Internal Research)
+- Write the SIMPLE section as a direct word-for-word client-facing script (or rep-facing if Strategy Mode)
 - End with [[EXPAND_PROMPT]]
 - Follow all CRITICAL FORMAT INSTRUCTION rules
 - Follow all ${MODE_LABELS[newMode]} Skill file rules exactly
@@ -804,6 +805,42 @@ The --- divider must appear on its own line with nothing before or after it on t
       streamingConvRef.current = null;
       setStreaming(false);
       setBgStreaming(prev => { const next = new Set(prev); next.delete(thisConvId || ""); return next; });
+    }
+  }
+
+  function switchInteractionMode(newMode: InteractionMode) {
+    if (newMode === interactionMode) return;
+    const oldMode = interactionMode;
+    setInteractionMode(newMode);
+
+    // Only insert divider if there are messages in the conversation
+    if (messages.length > 0) {
+      const label = newMode === "client" ? "Client Mode" : "Strategy Mode";
+      const dividerMsg: Message = { role: "assistant", content: `\u2014 ${label} \u2014`, isDivider: true, mode: chatMode };
+
+      // When switching from Strategy → Client, find last Strategy assistant message and add draft buttons
+      if (oldMode === "research" && newMode === "client") {
+        // Find the most recent assistant message that was in research/strategy mode
+        let lastStrategyIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === "assistant" && messages[i].interactionMode === "research" && !messages[i].isDivider) {
+            lastStrategyIdx = i;
+            break;
+          }
+        }
+        if (lastStrategyIdx >= 0) {
+          // Mark the message so it gets client-mode draft buttons
+          setMessages(prev => {
+            const copy = [...prev];
+            copy[lastStrategyIdx] = { ...copy[lastStrategyIdx], draftLabel: "strategy-to-client" };
+            return [...copy, dividerMsg];
+          });
+        } else {
+          setMessages(prev => [...prev, dividerMsg]);
+        }
+      } else {
+        setMessages(prev => [...prev, dividerMsg]);
+      }
     }
   }
 
@@ -1306,7 +1343,7 @@ ${context}`;
                       {(["client", "research"] as InteractionMode[]).map(v => (
                         <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
                           style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
-                          {v === "client" ? "Client Interaction" : "Internal Research"}
+                          {v === "client" ? "Client Mode" : "Strategy Mode"}
                         </button>
                       ))}
                     </div>
@@ -1415,17 +1452,17 @@ ${context}`;
           {/* Interaction mode toggle */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
             <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
-              <button onClick={() => setInteractionMode("client")}
+              <button onClick={() => switchInteractionMode("client")}
                 style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
                   background: interactionMode === "client" ? "#3c3b22" : "transparent",
                   color: interactionMode === "client" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
-                Client Interaction
+                Client Mode
               </button>
-              <button onClick={() => setInteractionMode("research")}
+              <button onClick={() => switchInteractionMode("research")}
                 style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
                   background: interactionMode === "research" ? "#3c3b22" : "transparent",
                   color: interactionMode === "research" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
-                Internal Research
+                Strategy Mode
               </button>
             </div>
           </div>

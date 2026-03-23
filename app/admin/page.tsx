@@ -74,7 +74,7 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
   const hov = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "rgba(204,138,57,0.08)";
   const unhov = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "transparent";
   const modes = [["sales", "Sales"], ["client-success", "Client Success"], ["fulfillment", "Revenue Management"], ["onboarding", "Onboarding"]];
-  const views = [["client", "Client Interaction"], ["research", "Internal Research"]];
+  const views = [["client", "Client Mode"], ["research", "Strategy Mode"]];
 
   return (
     <div>
