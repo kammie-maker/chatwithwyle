@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 
 function Spinner({ size = 14, color = "currentColor" }: { size?: number; color?: string }) {
@@ -602,7 +602,7 @@ export default function Home() {
     }
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
-  });
+  }, [modeDropdownOpen, modeSwitchPrompt, confirmDeleteConv, confirmClearAll, forceRewriteConfirm, confirmRewrite, mobileMenuOpen]);
 
   function switchMode(mode: ChatMode) {
     if (mode === chatMode) { setModeDropdownOpen(false); return; }
@@ -701,7 +701,14 @@ export default function Home() {
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
   function cleanResponse(text: string): string {
-    return text.replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ");
+    return text
+      .replace(/\[\[EXPAND_PROMPT\]\]/g, "")
+      .replace(/\[\[CLARIFY\]\][\s\S]*/g, "")
+      .replace(/^---+$/gm, "")
+      .replace(/\u2014/g, " ")
+      .replace(/\u2013/g, " ")
+      .replace(/ {2,}/g, " ")
+      .trim();
   }
 
   async function sendMessage(text: string) {
@@ -1055,7 +1062,7 @@ ${context}`;
             {/* Sidebar header */}
             <div className="shrink-0 flex items-center justify-between px-3 py-3">
               {chatSidebarOpen && (
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 24, height: 24, flexShrink: 0 }}>
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 24, height: 24, flexShrink: 0 }} aria-hidden="true">
                   <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
                   <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
                 </svg>
@@ -1179,7 +1186,7 @@ ${context}`;
 
           {/* Mobile sidebar overlay backdrop */}
           {mobileMenuOpen && (
-            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
+            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileMenuOpen(false)} role="presentation" />
           )}
 
           {/* Chat content */}
@@ -1228,7 +1235,7 @@ ${context}`;
             )}
             {!convLoading && messages.length === 0 && (
               <div className="text-center py-6">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }}>
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }} aria-label="Wyle" role="img">
                   <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
                   <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
                   <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
@@ -1277,7 +1284,7 @@ ${context}`;
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
                       msgInteractionMode={msg.interactionMode || "client"} draftLabel={msg.draftLabel}
-                      isError={msg.isError} onRetry={msg.isError ? () => { setMessages(prev => prev.filter((_, idx) => idx !== i)); if (i > 0) { const prevMsg = messages[i-1]; if (prevMsg?.role === "user") { const txt = typeof prevMsg.content === "string" ? prevMsg.content : ""; sendMessage(txt); } } } : undefined}
+                      isError={msg.isError} onRetry={msg.isError ? () => { const prevMsg = messages[i-1]; setMessages(prev => prev.filter((_, idx) => idx !== i)); if (prevMsg?.role === "user") { const txt = typeof prevMsg.content === "string" ? prevMsg.content : ""; setTimeout(() => sendMessage(txt), 100); } } : undefined}
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
