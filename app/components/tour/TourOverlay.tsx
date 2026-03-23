@@ -137,7 +137,7 @@ export default function TourOverlay() {
     transition: "all 200ms ease",
   } : {};
 
-  // Calculate tooltip position
+  // Calculate tooltip position with auto-flip to prevent overflow
   let tooltipStyle: React.CSSProperties = {};
   let arrowStyle: React.CSSProperties = {};
   let arrowDir: "top" | "bottom" | "left" | "right" = "top";
@@ -145,19 +145,39 @@ export default function TourOverlay() {
   if (targetRect) {
     const gap = 12;
     const tw = 300;
-    const placement = step.placement;
+    const th = 180; // estimated tooltip height
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const preferred = step.placement;
 
-    if (placement === "top") {
-      tooltipStyle = { position: "fixed", bottom: window.innerHeight - targetRect.top + gap + padding, left: Math.max(16, Math.min(targetRect.left, window.innerWidth - tw - 16)), width: tw, zIndex: 10002 };
+    // Available space in each direction
+    const spaceRight = vw - targetRect.right - gap - padding;
+    const spaceLeft = targetRect.left - gap - padding;
+    const spaceAbove = targetRect.top - gap - padding;
+    const spaceBelow = vh - targetRect.bottom - gap - padding;
+
+    // Determine best placement: try preferred, then fallback
+    let chosen: "top" | "bottom" | "left" | "right" = preferred === "center" ? "top" : preferred;
+    if (chosen === "right" && spaceRight < tw) chosen = spaceLeft >= tw ? "left" : spaceAbove >= th ? "top" : "bottom";
+    else if (chosen === "left" && spaceLeft < tw) chosen = spaceRight >= tw ? "right" : spaceAbove >= th ? "top" : "bottom";
+    else if (chosen === "top" && spaceAbove < th) chosen = spaceBelow >= th ? "bottom" : spaceRight >= tw ? "right" : "left";
+    else if (chosen === "bottom" && spaceBelow < th) chosen = spaceAbove >= th ? "top" : spaceRight >= tw ? "right" : "left";
+
+    // Clamp helper
+    const clampY = (y: number) => Math.max(16, Math.min(y, vh - th - 16));
+    const clampX = (x: number) => Math.max(16, Math.min(x, vw - tw - 16));
+
+    if (chosen === "top") {
+      tooltipStyle = { position: "fixed", bottom: vh - targetRect.top + gap + padding, left: clampX(targetRect.left), width: tw, zIndex: 10002 };
       arrowDir = "bottom";
-    } else if (placement === "bottom") {
-      tooltipStyle = { position: "fixed", top: targetRect.bottom + gap + padding, left: Math.max(16, Math.min(targetRect.left, window.innerWidth - tw - 16)), width: tw, zIndex: 10002 };
+    } else if (chosen === "bottom") {
+      tooltipStyle = { position: "fixed", top: targetRect.bottom + gap + padding, left: clampX(targetRect.left), width: tw, zIndex: 10002 };
       arrowDir = "top";
-    } else if (placement === "right") {
-      tooltipStyle = { position: "fixed", top: Math.max(16, targetRect.top - padding), left: targetRect.right + gap + padding, width: tw, zIndex: 10002 };
+    } else if (chosen === "right") {
+      tooltipStyle = { position: "fixed", top: clampY(targetRect.top - padding), left: targetRect.right + gap + padding, width: tw, zIndex: 10002 };
       arrowDir = "left";
-    } else if (placement === "left") {
-      tooltipStyle = { position: "fixed", top: Math.max(16, targetRect.top - padding), right: window.innerWidth - targetRect.left + gap + padding, width: tw, zIndex: 10002 };
+    } else if (chosen === "left") {
+      tooltipStyle = { position: "fixed", top: clampY(targetRect.top - padding), left: Math.max(16, targetRect.left - gap - padding - tw), width: tw, zIndex: 10002 };
       arrowDir = "right";
     }
 
