@@ -59,6 +59,13 @@ export function getAuthOptions(): NextAuthOptions {
       GoogleProvider({
         clientId: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        authorization: {
+          params: {
+            scope: "openid email profile https://www.googleapis.com/auth/gmail.send",
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
       }),
     ],
     callbacks: {
@@ -72,11 +79,36 @@ export function getAuthOptions(): NextAuthOptions {
         }
         return true;
       },
-      async jwt({ token, user }) {
+      async jwt({ token, user, account }) {
+        if (account) {
+          token.access_token = account.access_token;
+          token.refresh_token = account.refresh_token;
+          token.expires_at = account.expires_at;
+        }
         if (user) {
           const email = user.email?.toLowerCase() || "";
           const { role } = await checkUserStatus(email);
           token.role = role;
+        }
+        // Refresh expired token
+        if (token.expires_at && typeof token.expires_at === "number" && Date.now() >= token.expires_at * 1000) {
+          try {
+            const response = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: process.env.GOOGLE_CLIENT_ID!,
+                client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                grant_type: "refresh_token",
+                refresh_token: token.refresh_token as string,
+              }),
+            });
+            const tokens = await response.json();
+            if (tokens.access_token) {
+              token.access_token = tokens.access_token;
+              token.expires_at = Math.floor(Date.now() / 1000 + tokens.expires_in);
+            }
+          } catch { /* use existing token */ }
         }
         return token;
       },
@@ -84,6 +116,7 @@ export function getAuthOptions(): NextAuthOptions {
         if (session.user) {
           (session.user as Record<string, unknown>).role = token.role;
         }
+        (session as unknown as Record<string, unknown>).accessToken = token.access_token;
         return session;
       },
     },

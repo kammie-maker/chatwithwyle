@@ -124,7 +124,7 @@ export default function AdminPage() {
   const [inviteMode, setInviteMode] = useState("sales");
   const [inviteInteraction, setInviteInteraction] = useState("client");
   const [inviting, setInviting] = useState(false);
-  const [addedUser, setAddedUser] = useState<{ firstName: string; email: string; defaultMode: string } | null>(null);
+  const [addedUser, setAddedUser] = useState<{ firstName: string; email: string; defaultMode: string; emailSent: boolean } | null>(null);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ type: string; email: string; name: string } | null>(null);
 
@@ -143,7 +143,7 @@ export default function AdminPage() {
   async function deleteUser(email: string) { try { await fetch("/api/admin/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); setToast("User removed"); setConfirmAction(null); loadUsers(); } catch { setToast("Delete failed"); } }
   async function revokeAll() { try { await fetch("/api/admin/users", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: session?.user?.email, action: "revoke_all" }) }); setToast("All sessions revoked"); setConfirmAction(null); } catch { setToast("Failed"); } }
   const MODE_DISPLAY: Record<string, string> = { sales: "Sales", "client-success": "Client Success", fulfillment: "Revenue Management", onboarding: "Onboarding" };
-  async function addUser() { if (!inviteEmail.trim()) return; setInviting(true); try { const r = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, firstName: inviteFirstName.trim(), lastName: inviteLastName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) }); const d = await r.json(); if (d.error) { setToast(d.error); setInviting(false); return; } const fn = inviteFirstName.trim() || inviteEmail.split("@")[0]; setAddedUser({ firstName: fn, email: inviteEmail.trim().toLowerCase(), defaultMode: MODE_DISPLAY[inviteMode] || inviteMode }); setCopiedMsg(false); setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); setShowInvite(false); loadUsers(); } catch { setToast("Failed to add user"); } finally { setInviting(false); } }
+  async function addUser() { if (!inviteEmail.trim()) return; setInviting(true); try { const r = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, firstName: inviteFirstName.trim(), lastName: inviteLastName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) }); const d = await r.json(); if (d.error) { setToast(d.error); setInviting(false); return; } const fn = inviteFirstName.trim() || inviteEmail.split("@")[0]; setAddedUser({ firstName: fn, email: inviteEmail.trim().toLowerCase(), defaultMode: MODE_DISPLAY[inviteMode] || inviteMode, emailSent: !!d.emailSent }); setCopiedMsg(false); setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); setShowInvite(false); loadUsers(); } catch { setToast("Failed to add user"); } finally { setInviting(false); } }
   function handleAction(u: User, type: string) { setConfirmAction({ type, email: u.email, name: u.name || u.email }); }
   function executeConfirm() { if (!confirmAction) return; const { type, email } = confirmAction; if (type === "delete") deleteUser(email); else if (type === "suspend") updateUser(email, { action: "suspend" }); else if (type === "unsuspend") { updateUser(email, { action: "unsuspend" }); setConfirmAction(null); } else if (type === "revoke") updateUser(email, { action: "revoke_sessions" }); else if (type === "revoke_all") revokeAll(); if (type !== "unsuspend") setConfirmAction(null); }
   function confirmTitle() { if (!confirmAction) return ""; const t = confirmAction.type; if (t === "delete") return "Delete user?"; if (t === "suspend") return "Suspend user?"; if (t === "unsuspend") return "Restore access?"; if (t === "revoke") return "Revoke sessions?"; if (t === "revoke_all") return "Revoke ALL sessions?"; return "Confirm"; }
@@ -290,8 +290,16 @@ export default function AdminPage() {
       {addedUser && (
         <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div className="modal-enter mx-4" style={{ width: 480, maxWidth: "100%", background: "#fff", borderRadius: 16, padding: "28px", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, fontFamily: "var(--font-heading)" }}>{addedUser.firstName} has been added to Wyle.</h3>
-            <p style={{ fontSize: 15, color: "#666", marginBottom: 16 }}>Send them this message to get started:</p>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, fontFamily: "var(--font-heading)" }}>
+              {addedUser.emailSent
+                ? `${addedUser.firstName} has been added to Wyle and will receive a welcome email from you shortly.`
+                : `${addedUser.firstName} has been added to Wyle.`}
+            </h3>
+            <p style={{ fontSize: 15, color: "#666", marginBottom: 16 }}>
+              {addedUser.emailSent
+                ? "You can also share this message via Slack:"
+                : "The welcome email could not be sent. Share the URL with them manually:"}
+            </p>
             <div style={{ background: "var(--color-cream)", borderRadius: 10, padding: "14px 16px", fontSize: 14, lineHeight: 1.6, color: "var(--color-onyx)", border: "1px solid rgba(0,0,0,0.08)", marginBottom: 16, whiteSpace: "pre-wrap" }}>
               {`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\nhttps://chatwithwyle.vercel.app\n\nYour default mode is set to ${addedUser.defaultMode}. Let me know if you have any questions.`}
             </div>
@@ -299,7 +307,7 @@ export default function AdminPage() {
               <button onClick={() => {
                 navigator.clipboard.writeText(`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\nhttps://chatwithwyle.vercel.app\n\nYour default mode is set to ${addedUser.defaultMode}. Let me know if you have any questions.`);
                 setCopiedMsg(true); setTimeout(() => setCopiedMsg(false), 2000);
-              }} className="btn-outline" style={{ fontSize: 14 }}>{copiedMsg ? "Copied!" : "Copy Message"}</button>
+              }} className="btn-outline" style={{ fontSize: 14 }}>{copiedMsg ? "Copied!" : addedUser.emailSent ? "Copy Slack Message" : "Copy Message"}</button>
               <button onClick={() => setAddedUser(null)} className="btn-primary" style={{ fontSize: 14 }}>Done</button>
             </div>
           </div>

@@ -58,6 +58,36 @@ export async function GET() {
   return Response.json({ users });
 }
 
+const MODE_LABELS: Record<string, string> = { sales: "Sales", "client-success": "Client Success", fulfillment: "Revenue Management", onboarding: "Onboarding" };
+
+async function sendWelcomeEmail(accessToken: string, toEmail: string, firstName: string, defaultMode: string, adminName: string): Promise<boolean> {
+  const subject = "You're invited to Wyle";
+  const modeLabel = MODE_LABELS[defaultMode] || defaultMode;
+  const body = `Hi ${firstName},\n\n${adminName} has added you to Wyle, Freewyld Foundry's internal AI tool.\n\nSign in with your Freewyld Google account:\nhttps://chatwithwyle.vercel.app\n\nYour default mode is set to ${modeLabel}. The first time you sign in you'll get a quick interactive tour of the app.\n\nLet ${adminName.split(" ")[0]} know if you have any questions.`;
+
+  const email = [
+    'Content-Type: text/plain; charset="UTF-8"',
+    "MIME-Version: 1.0",
+    `To: ${toEmail}`,
+    `Subject: ${subject}`,
+    "",
+    body,
+  ].join("\n");
+
+  const encodedEmail = Buffer.from(email).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  try {
+    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: encodedEmail }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 // POST: create/add user
 export async function POST(req: Request) {
   const session = await getServerSession(getAuthOptions());
@@ -83,8 +113,16 @@ export async function POST(req: Request) {
     VALUES (${key}, ${fn}, ${ln}, ${role}, 'pending', ${defaultMode}, ${defaultInteraction})
   `;
 
+  // Send welcome email via Gmail API
+  let emailSent = false;
+  const accessToken = (session as unknown as Record<string, unknown>).accessToken as string;
+  const adminName = session.user.name || session.user.email || "Your admin";
+  if (accessToken) {
+    emailSent = await sendWelcomeEmail(accessToken, key, fn, defaultMode, adminName);
+  }
+
   const { rows } = await sql`SELECT * FROM users WHERE email = ${key}`;
-  return Response.json({ success: true, user: rowToUser(rows[0]) });
+  return Response.json({ success: true, user: rowToUser(rows[0]), emailSent });
 }
 
 // PUT: update user role/status
