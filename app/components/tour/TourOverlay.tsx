@@ -68,9 +68,9 @@ export default function TourOverlay() {
 
   if (!isTourActive || !step) return null;
 
-  // During step transitions, show only the backdrop to prevent flash at old position
+  // During step transitions, show only the full dark backdrop — no tooltip, no modal, no highlight
   if (isTransitioning) {
-    return <div className="tour-backdrop" style={{ background: "rgba(0,0,0,0.5)" }} />;
+    return <div className="tour-backdrop" style={{ background: "rgba(0,0,0,0.7)" }} />;
   }
 
   const isExpandStep = step.id === "expand-info";

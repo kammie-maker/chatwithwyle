@@ -71,11 +71,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     setIsTransitioning(true);
     setTimeout(() => {
       setCurrentStep(idx);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setIsTransitioning(false);
-        });
-      });
+      // Use a fixed timeout instead of rAF for reliable timing
+      setTimeout(() => setIsTransitioning(false), 50);
     }, delay);
   }, []);
 
@@ -84,7 +81,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     if (next >= steps.length) { completeTour(); return; }
     const step = steps[next];
     if (step.beforeShow) setTourAction(step.beforeShow);
-    const delay = step.beforeShow?.setActiveTab ? 300 : 100;
+    // Modal steps need minimal delay, spotlight steps need more
+    const delay = step.beforeShow?.setActiveTab ? 300 : step.isModal ? 50 : 100;
     transitionToStep(next, delay);
   }, [currentStep, steps, completeTour, transitionToStep]);
 
