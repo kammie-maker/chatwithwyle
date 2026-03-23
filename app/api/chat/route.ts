@@ -13,7 +13,6 @@ interface CachedFiles {
   skillClientSuccess: string;
   skillFulfillment: string;
   skillOnboarding: string;
-  sourceDocs: string;
   fetchedAt: number;
 }
 
@@ -33,14 +32,6 @@ const FILE_IDS: Record<string, string> = {
   "Skill-Onboarding.md": "1BNn5kKsmObMFZxLFxVHj7S71MRnhYKXP",
 };
 
-// Only the critical SOURCE files — pricing/contracts/guarantee (not transcripts)
-const SOURCE_FILE_IDS: Record<string, string> = {
-  "SOURCE-Pricing-Contracts-General-Revenue-Pricing-Management-Contract---January-26-202.md": "1jrVfwpCcV8LjX3bdBTW1KUbeo2_84CRs",
-  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Fee-Calculation-Memo---January-26.md": "1cQ_JIEFiRI1A8DPvmL8o2CLestukurcI",
-  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Fee-Structure-Negotiation-Guideli.md": "1xMTxBj6F-Gt1_U9X9g7xl0ZzYkJta3He",
-  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Garuantee---January-26-2026---Pri.md": "14nb9ph-RFY0Fpv0IBa7EeYov7F2-eZcs",
-  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-How-Estimated-Next-12-Months-Reve.md": "1cCEBI9Cm4usyO-4TiBym8hGuU_L7hTDR",
-};
 
 async function fetchAllFiles(): Promise<CachedFiles> {
   if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache;
@@ -52,8 +43,7 @@ async function fetchAllFiles(): Promise<CachedFiles> {
 
   try {
     // Fetch all needed files in parallel by ID — no list_files call needed
-    const allIds = { ...FILE_IDS, ...SOURCE_FILE_IDS };
-    const entries = Object.entries(allIds);
+    const entries = Object.entries(FILE_IDS);
 
     const results = await Promise.all(entries.map(async ([name, id]) => {
       const r = await fetch(webhookUrl, {
@@ -66,11 +56,6 @@ async function fetchAllFiles(): Promise<CachedFiles> {
 
     const find = (name: string) => results.find(r => r.name === name)?.content || "";
 
-    const sourceDocs = results
-      .filter(r => r.name.startsWith("SOURCE-"))
-      .map(r => "--- " + r.name + " ---\n" + r.content)
-      .join("\n\n");
-
     const result: CachedFiles = {
       persona: find("Persona-Wyle.md"),
       sales: find("Agent-Sales.md"),
@@ -80,7 +65,6 @@ async function fetchAllFiles(): Promise<CachedFiles> {
       skillClientSuccess: find("Skill-ClientSuccess.md"),
       skillFulfillment: find("Skill-Fulfillment.md"),
       skillOnboarding: find("Skill-Onboarding.md"),
-      sourceDocs,
       fetchedAt: Date.now(),
     };
 
@@ -94,7 +78,7 @@ async function fetchAllFiles(): Promise<CachedFiles> {
 }
 
 function emptyFiles(): CachedFiles {
-  return { persona: "", sales: "", ceo: "", revenueExpert: "", skillSales: "", skillClientSuccess: "", skillFulfillment: "", skillOnboarding: "", sourceDocs: "", fetchedAt: 0 };
+  return { persona: "", sales: "", ceo: "", revenueExpert: "", skillSales: "", skillClientSuccess: "", skillFulfillment: "", skillOnboarding: "", fetchedAt: 0 };
 }
 
 async function fetchKnowledgeBase(): Promise<string> {
@@ -242,21 +226,11 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
     }
   }
 
-  // 5. SOURCE documents (authoritative, cap at 30K)
-  if (files.sourceDocs) {
-    const SOURCE_MAX = 30000;
-    const srcText = files.sourceDocs.length > SOURCE_MAX ? files.sourceDocs.slice(0, SOURCE_MAX) + "\n\n[SOURCE docs truncated]" : files.sourceDocs;
-    parts.push("============================================================\n# PRIMARY SOURCE DOCUMENTS — AUTHORITATIVE\n============================================================\n\nThe following are primary source documents from Freewyld Foundry. They contain the exact fee structure, guarantee terms, contract language, and operational processes. When answering any question about pricing, fees, guarantees, contracts, or processes, use ONLY these documents as your source. Never guess or generalize. If the answer is not in these documents, say so directly.\n\n" + srcText);
-  }
-
-  // 6. Compiled KB — dynamic truncation
-  const preKbLen = parts.join("\n\n").length;
+  // 5. Compiled KB — minimal supplementary context (knowledge is now in Skill files)
   if (kb) {
-    const TARGET = 100000;
-    const remaining = Math.max(TARGET - preKbLen, 15000);
-    const KB_MAX = Math.min(remaining, 40000);
+    const KB_MAX = 10000;
     const kbText = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n\n[KB truncated]" : kb;
-    parts.push("=== KNOWLEDGE BASE ===\n" + kbText);
+    parts.push("=== SUPPLEMENTARY KNOWLEDGE BASE ===\n" + kbText);
   }
 
   let total = parts.join("\n\n");
@@ -269,7 +243,7 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
 
   // Debug: log each component size
   const agentSize = agentKeys.reduce((sum, k) => sum + Math.min((agentMap[k]?.content || "").length, AGENT_MAX), 0);
-  console.log(`[chat] Prompt components: format=${(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION).length}, persona=${persona.length}, agents=${agentSize} (${agentKeys.join("+")}), skill=${(skill||"").length}, source=${(files.sourceDocs||"").length}, kb=${kb?.length || 0}. Pre-KB=${preKbLen}. Total=${total.length.toLocaleString()} chars. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
+  console.log(`[chat] Prompt: persona=${persona.length}, agents=${agentSize} (${agentKeys.join("+")}), skill=${(skill||"").length}, kb=${Math.min(kb?.length || 0, 10000)}. Total=${total.length.toLocaleString()} chars. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
 
   return total;
 }
