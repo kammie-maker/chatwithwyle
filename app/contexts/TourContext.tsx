@@ -119,19 +119,6 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [isTourActive, nextStep, prevStep, skipTour]);
 
-  // Dev shortcut: Cmd+Shift+Y to reset and restart tour
-  useEffect(() => {
-    function handleDevKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Y") {
-        e.preventDefault();
-        console.log("🎯 Tour reset — Cmd+Shift+Y — Dev mode only");
-        startTour();
-      }
-    }
-    document.addEventListener("keydown", handleDevKey);
-    return () => document.removeEventListener("keydown", handleDevKey);
-  }, [startTour]);
-
   return (
     <TourContext.Provider value={{ isTourActive, isTransitioning, currentStep, steps, startTour, nextStep, prevStep, skipTour, tourAction, clearTourAction }}>
       {children}
