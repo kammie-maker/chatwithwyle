@@ -68,7 +68,7 @@ async function fetchAllFiles(): Promise<CachedFiles> {
       fetchedAt: Date.now(),
     };
 
-    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${entries.length} files, source docs: ${sourceDocs.length} chars)`);
+    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${entries.length} files)`);
     fileCache = result;
     return result;
   } catch (err) {
