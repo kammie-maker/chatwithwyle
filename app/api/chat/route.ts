@@ -21,28 +21,48 @@ let fileCache: CachedFiles | null = null;
 let kbCache: { text: string; fetchedAt: number } | null = null;
 const CACHE_TTL = 60 * 60 * 1000;
 
+// Files we actually need — fetch by name only
+const NEEDED_FILES = [
+  "Persona-Wyle.md", "Agent-Sales.md", "Agent-CEO.md", "Agent-RevenueExpert.md",
+  "Skill-Sales.md", "Skill-ClientSuccess.md", "Skill-Fulfillment.md", "Skill-Onboarding.md",
+];
+
 async function fetchAllFiles(): Promise<CachedFiles> {
   if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache;
 
   const t0 = Date.now();
   const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
-  if (!webhookUrl) return emptyFiles();
+  const password = process.env.WYLE_PASSWORD;
+  if (!webhookUrl || !password) return emptyFiles();
 
   try {
-    // Single call to read_all_sources — gets everything
-    const res = await fetch(webhookUrl, {
+    // Step 1: list files to get IDs (fast, small response)
+    const listRes = await fetch(webhookUrl, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "read_all_sources" }), redirect: "follow",
+      body: JSON.stringify({ action: "list_files", password }), redirect: "follow",
     });
-    const data = await res.json();
-    const sources: { name: string; content: string }[] = data.sources || [];
+    const listData = await listRes.json();
+    const allFiles: { id: string; name: string }[] = listData.files || [];
 
-    const find = (name: string) => sources.find(s => s.name === name)?.content || "";
+    // Filter to only files we need + SOURCE- files
+    const needed = allFiles.filter(f => NEEDED_FILES.includes(f.name) || f.name.startsWith("SOURCE-"));
 
-    // Collect SOURCE- files
-    const sourceDocs = sources
-      .filter(s => s.name.startsWith("SOURCE-"))
-      .map(s => "--- " + s.name + " ---\n" + s.content)
+    // Step 2: fetch each needed file in parallel
+    const fetches = needed.map(async (f) => {
+      const r = await fetch(webhookUrl, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_file", fileId: f.id, password }), redirect: "follow",
+      });
+      const d = await r.json();
+      return { name: f.name, content: d.content || "" };
+    });
+
+    const results = await Promise.all(fetches);
+    const find = (name: string) => results.find(r => r.name === name)?.content || "";
+
+    const sourceDocs = results
+      .filter(r => r.name.startsWith("SOURCE-"))
+      .map(r => "--- " + r.name + " ---\n" + r.content)
       .join("\n\n");
 
     const result: CachedFiles = {
@@ -58,7 +78,7 @@ async function fetchAllFiles(): Promise<CachedFiles> {
       fetchedAt: Date.now(),
     };
 
-    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${sources.length} files, source docs: ${sourceDocs.length} chars)`);
+    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${needed.length} of ${allFiles.length} files, source docs: ${sourceDocs.length} chars)`);
     fileCache = result;
     return result;
   } catch (err) {
