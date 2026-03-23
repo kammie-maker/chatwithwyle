@@ -402,6 +402,9 @@ export default function Home() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [chatSidebarOpen, setChatSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchCurrentX = useRef<number | null>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Conversation[] | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -1057,8 +1060,11 @@ ${context}`;
       {activeTab === "chat" && (
         <div className="flex-1 flex overflow-hidden">
           {/* Chat sidebar */}
-          <nav aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
-            style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+          <nav ref={sidebarRef} aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
+            style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
+            onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
+            onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
+            onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
             {/* Sidebar header */}
             <div className="shrink-0 flex items-center justify-between px-3 py-3">
               {chatSidebarOpen && (
@@ -1190,7 +1196,9 @@ ${context}`;
           )}
 
           {/* Chat content */}
-          <div role="main" className="flex-1 flex flex-col overflow-hidden">
+          <div role="main" className="flex-1 flex flex-col overflow-hidden"
+            onTouchStart={e => { if (e.touches[0].clientX < 30) touchStartX.current = e.touches[0].clientX; else touchStartX.current = null; }}
+            onTouchEnd={e => { if (touchStartX.current !== null && touchStartX.current < 30) { const endX = e.changedTouches[0].clientX; if (endX - touchStartX.current > 80) setMobileMenuOpen(true); } touchStartX.current = null; }}>
           {/* Interaction mode toggle — fixed at top center */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
             <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
