@@ -60,18 +60,26 @@ export async function GET() {
 
 const MODE_LABELS: Record<string, string> = { sales: "Sales", "client-success": "Client Success", fulfillment: "Revenue Management", onboarding: "Onboarding" };
 
-async function sendWelcomeEmail(accessToken: string, toEmail: string, firstName: string, defaultMode: string, adminName: string): Promise<boolean> {
-  const subject = "You're invited to Wyle";
-  const modeLabel = MODE_LABELS[defaultMode] || defaultMode;
-  const body = `Hi ${firstName},\n\n${adminName} has added you to Wyle, Freewyld Foundry's internal AI tool.\n\nSign in with your Freewyld Google account:\nhttps://chatwithwyle.vercel.app\n\nYour default mode is set to ${modeLabel}. The first time you sign in you'll get a quick interactive tour of the app.\n\nLet ${adminName.split(" ")[0]} know if you have any questions.`;
+const INTERACTION_LABELS: Record<string, string> = { client: "Client Mode", research: "Strategy Mode" };
+const MODE_CHAT_LABELS: Record<string, string> = { sales: "Sales Chat", "client-success": "Client Success Chat", fulfillment: "Revenue Management Chat", onboarding: "Onboarding Chat" };
+
+function buildHtmlEmail(firstName: string, adminName: string, toEmail: string, defaultMode: string, defaultInteraction: string): string {
+  const modeDisplay = MODE_CHAT_LABELS[defaultMode] || defaultMode;
+  const viewDisplay = INTERACTION_LABELS[defaultInteraction] || defaultInteraction;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head><body style="margin:0;padding:0;background:#f8f6ee;font-family:'Open Sans',Arial,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f6ee;padding:40px 20px;"><tr><td align="center"><table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid rgba(0,0,0,0.07);"><tr><td style="background:#3c3b22;padding:32px 40px;text-align:center;"><div style="display:inline-block;width:64px;height:64px;background:#CC8A39;border-radius:14px;text-align:center;line-height:64px;"><span style="font-family:Georgia,serif;font-size:36px;font-weight:700;color:#3c3b22;">W</span></div><div style="margin-top:12px;font-family:Georgia,serif;font-size:13px;font-weight:600;color:#CC8A39;letter-spacing:4px;">WYLE</div></td></tr><tr><td style="padding:40px 48px 32px;"><p style="margin:0 0 8px;font-family:Georgia,serif;font-size:22px;font-weight:600;color:#161616;line-height:1.3;">Hi ${firstName},</p><p style="margin:16px 0 0;font-size:15px;color:#444;line-height:1.75;">${adminName} has added you to <strong>Wyle</strong> &mdash; Freewyld Foundry's internal AI tool.</p><p style="margin:12px 0 0;font-size:15px;color:#444;line-height:1.75;">Wyle knows Freewyld's processes, protocols, pricing, and promises. Use it to prepare for client calls, handle objections, and draft follow-ups &mdash; in seconds.</p><table cellpadding="0" cellspacing="0" style="margin:32px 0;"><tr><td style="background:#CC8A39;border-radius:10px;"><a href="https://chatwithwyle.vercel.app" style="display:inline-block;padding:14px 32px;font-family:'Open Sans',Arial,sans-serif;font-size:15px;font-weight:600;color:#161616;text-decoration:none;letter-spacing:0.2px;">Sign in to Wyle &rarr;</a></td></tr></table><table cellpadding="0" cellspacing="0" style="width:100%;background:#f8f6ee;border-radius:10px;border:1px solid rgba(0,0,0,0.07);margin-bottom:24px;"><tr><td style="padding:16px 20px;"><p style="margin:0;font-size:13px;color:#888;letter-spacing:1px;text-transform:uppercase;font-weight:600;">YOUR SETUP</p><table style="margin-top:10px;width:100%;"><tr><td style="font-size:14px;color:#555;padding:4px 0;width:140px;">Default mode</td><td style="font-size:14px;color:#161616;font-weight:600;padding:4px 0;">${modeDisplay}</td></tr><tr><td style="font-size:14px;color:#555;padding:4px 0;">Default view</td><td style="font-size:14px;color:#161616;font-weight:600;padding:4px 0;">${viewDisplay}</td></tr><tr><td style="font-size:14px;color:#555;padding:4px 0;">Sign in with</td><td style="font-size:14px;color:#161616;font-weight:600;padding:4px 0;">${toEmail} via Google</td></tr></table></td></tr></table><p style="margin:0;font-size:14px;color:#888;line-height:1.7;">First time signing in? You'll get a quick interactive tour of the app. The full guide is always available inside Wyle if you need it.</p><p style="margin:20px 0 0;font-size:14px;color:#888;line-height:1.7;">Questions? Reply to this email or message ${adminName.split(" ")[0]} on Slack.</p></td></tr><tr><td style="padding:20px 48px 32px;border-top:1px solid rgba(0,0,0,0.07);"><p style="margin:0;font-size:12px;color:#aaa;text-align:center;line-height:1.6;">Wyle &mdash; Freewyld Foundry Internal Tool<br>wyle.freewyldfoundry.com</p></td></tr></table></td></tr></table></body></html>`;
+}
+
+async function sendWelcomeEmail(accessToken: string, toEmail: string, firstName: string, defaultMode: string, defaultInteraction: string, adminName: string): Promise<boolean> {
+  const subject = "You're in — welcome to Wyle";
+  const htmlBody = buildHtmlEmail(firstName, adminName, toEmail, defaultMode, defaultInteraction);
 
   const email = [
-    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Type: text/html; charset="UTF-8"',
     "MIME-Version: 1.0",
     `To: ${toEmail}`,
     `Subject: ${subject}`,
     "",
-    body,
+    htmlBody,
   ].join("\n");
 
   const encodedEmail = Buffer.from(email).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -118,7 +126,7 @@ export async function POST(req: Request) {
   const accessToken = (session as unknown as Record<string, unknown>).accessToken as string;
   const adminName = session.user.name || session.user.email || "Your admin";
   if (accessToken) {
-    emailSent = await sendWelcomeEmail(accessToken, key, fn, defaultMode, adminName);
+    emailSent = await sendWelcomeEmail(accessToken, key, fn, defaultMode, defaultInteraction, adminName);
   }
 
   const { rows } = await sql`SELECT * FROM users WHERE email = ${key}`;
