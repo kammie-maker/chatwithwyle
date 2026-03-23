@@ -198,14 +198,14 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
   return (
     <div className="flex gap-3 max-w-[85%]">
-      <div className="w-7 h-7 shrink-0 mt-0.5">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
+      <div className={`w-7 h-7 shrink-0 mt-0.5 ${isStreaming ? "avatar-streaming" : ""}`}>
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" aria-label="Wyle" role="img">
           <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
           <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
           <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
         </svg>
       </div>
-      <div style={{ color: "var(--color-onyx)", background: "var(--bg-card)", borderRadius: "12px", border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden", minWidth: 0 }}>
+      <div className="msg-bubble-assistant" style={{ overflow: "hidden", minWidth: 0 }}>
         {/* Label row: INTERNAL badge and/or Draft label */}
         {(isResearch || isDraft) && (
           <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
@@ -234,15 +234,15 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             const content = inlineExpanded[k];
             if (!content && k !== expandLoading) return null;
             return (
-              <div key={k} className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }}>
-                <div className="text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-mustard)" }}>
+              <div key={k} className="section-divider">
+                <div className="text-label mb-1.5" style={{ color: "var(--color-mustard)" }}>
                   {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
                 </div>
                 {content ? (
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap">{clean(content)}</div>
+                  <div className="msg-content whitespace-pre-wrap">{clean(content)}</div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-mustard)" }}>
-                    <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />
+                    <Spinner size={12} color="var(--color-mustard)" />
                     Loading...
                   </div>
                 )}
@@ -1032,8 +1032,8 @@ ${context}`;
         </div>
         <div className="flex items-center gap-3">
           {isAdminUser && (
-            <a href="/admin" className="text-xs font-medium px-3 py-1.5 transition-all"
-              style={{ borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(237,233,225,0.5)", textDecoration: "none", fontFamily: "var(--font-body)" }}>
+            <a href="/admin" className="text-xs font-medium px-3 py-1.5 transition-all hide-mobile"
+              style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(237,233,225,0.45)", textDecoration: "none", fontFamily: "var(--font-body)" }}>
               Admin
             </a>
           )}
@@ -1159,6 +1159,7 @@ ${context}`;
                     <button onClick={() => signOut()} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer", padding: 0 }}>
                       Sign out
                     </button>
+                    {isAdminUser && <a href="/admin" className="text-[10px]" style={{ color: "rgba(248,246,238,0.25)", textDecoration: "none" }}>Admin</a>}
                   </div>
                 </div>
               </>
@@ -1261,7 +1262,7 @@ ${context}`;
               const docBlocks = contentBlocks ? contentBlocks.filter((b): b is ContentBlock & { type: "document" } => b.type === "document") : [];
               const hasMedia = imageBlocks.length > 0 || docBlocks.length > 0 || fileTextBlocks.length > 0;
               return (
-                <div key={i} className={`mb-4 ${msg.role === "user" ? "flex justify-end" : ""}`}>
+                <div key={i} className={`msg-gap ${msg.role === "user" ? "flex justify-end" : ""}`}>
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
                       msgInteractionMode={msg.interactionMode || "client"} draftLabel={msg.draftLabel}
@@ -1271,11 +1272,11 @@ ${context}`;
                       onDraft={(action) => sendDraftAction(action, i)}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
-                    <div className="inline-block max-w-[80%] text-sm" style={{ background: "var(--color-bark)", borderRadius: "16px 16px 4px 16px", color: "var(--color-cream)", padding: hasMedia ? "0.5rem" : undefined }}>
+                    <div className="inline-block msg-bubble-user text-sm" style={{ padding: hasMedia ? "0.5rem" : "0.625rem 1rem" }}>
                       {imageBlocks.map((img, j) => <img key={j} src={`data:${img.source.media_type};base64,${img.source.data}`} alt="Uploaded" style={{ maxWidth: 200, borderRadius: "10px", display: "block", marginBottom: "0.5rem" }} />)}
                       {docBlocks.map((_, j) => <div key={`doc-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>PDF</div>)}
                       {fileTextBlocks.map((ftb, j) => { const fname = ftb.text.match(/^--- (.+?) ---/)?.[1] || "file"; return <div key={`ftb-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>{fname}</div>; })}
-                      {userText && <div style={{ padding: hasMedia ? "0 0.5rem 0.5rem" : "0.625rem 1rem" }}>{userText}</div>}
+                      {userText && <div style={{ padding: hasMedia ? "0 0.5rem 0.5rem" : undefined }}>{userText}</div>}
                     </div>
                   )}
                 </div>
