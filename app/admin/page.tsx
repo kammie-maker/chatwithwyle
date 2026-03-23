@@ -43,7 +43,7 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
       {open && (
         <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "var(--bg-card)", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 20, minWidth: 200, overflow: "hidden" }}>
           {/* Default Mode */}
-          <div className="px-4 py-2 text-[10px] font-semibold uppercase" style={{ color: "rgba(22,22,22,0.35)", letterSpacing: "1px" }}>Default Mode</div>
+          <div className="px-4 py-2 text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "1px" }}>Default Mode</div>
           <div className="px-4 pb-2">
             <select value={user.defaultMode || "sales"} onChange={e => { onUpdate({ defaultMode: e.target.value }); }} onClick={e => e.stopPropagation()}
               style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
@@ -51,7 +51,7 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
             </select>
           </div>
           {/* Default Interaction */}
-          <div className="px-4 py-2 text-[10px] font-semibold uppercase" style={{ color: "rgba(22,22,22,0.35)", letterSpacing: "1px", borderTop: "1px solid rgba(22,22,22,0.06)" }}>Default Interaction</div>
+          <div className="px-4 py-2 text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "1px", borderTop: "1px solid rgba(22,22,22,0.06)" }}>Default Interaction</div>
           <div className="px-4 pb-2">
             <select value={user.defaultInteraction || "client"} onChange={e => { onUpdate({ defaultInteraction: e.target.value }); }} onClick={e => e.stopPropagation()}
               style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
@@ -174,12 +174,12 @@ export default function AdminPage() {
           {/* Header */}
           <div className="flex items-center px-4 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)" }}>
             {[["First Name", "12%"], ["Last Name", "12%"], ["Email", "30%"], ["Role", "12%"], ["Status", "12%"], ["Last Login", "14%"]].map(([h, w]) => (
-              <div key={h} style={{ width: w, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>{h}</div>
+              <div key={h} style={{ width: w, fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>{h}</div>
             ))}
-            <div style={{ width: "8%", textAlign: "right", fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}></div>
+            <div style={{ width: "8%", textAlign: "right", fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}></div>
           </div>
           {loading ? <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-          : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "rgba(22,22,22,0.4)" }}>No active users.</div>
+          : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "var(--text-muted)" }}>No active users.</div>
           : active.map(u => {
             const st = STATUS_STYLES[u.status] || STATUS_STYLES.active;
             return (
@@ -187,10 +187,10 @@ export default function AdminPage() {
                 onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} /></div>
                 <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} /></div>
-                <div title={u.email} style={{ width: "30%", fontSize: 12, color: "rgba(22,22,22,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{u.email}</div>
+                <div title={u.email} style={{ width: "30%", fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{u.email}</div>
                 <div style={{ width: "12%" }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
-                <div style={{ width: "12%" }}><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
-                <div style={{ width: "14%", fontSize: 11, color: "rgba(22,22,22,0.45)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
+                <div style={{ width: "12%" }}><span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
+                <div style={{ width: "14%", fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
                 <div style={{ width: "8%", textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} onUpdate={updates => updateUser(u.email, updates)} /></div>
               </div>
             );
@@ -200,20 +200,20 @@ export default function AdminPage() {
         {/* Mobile card layout */}
         <div className="md:hidden flex flex-col gap-3">
           {loading ? <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-          : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "rgba(22,22,22,0.4)" }}>No active users.</div>
+          : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "var(--text-muted)" }}>No active users.</div>
           : active.map(u => {
             const st = STATUS_STYLES[u.status] || STATUS_STYLES.active;
             return (
               <div key={u.email} style={{ background: "var(--bg-card)", borderRadius: 12, padding: 16, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.06)" }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-semibold text-sm">{u.firstName || ""} {u.lastName || ""}</span>
-                  <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span>
+                  <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span>
                 </div>
                 <div className="text-xs mb-2" style={{ color: "rgba(22,22,22,0.5)" }}>{u.email}</div>
                 <div className="flex gap-2 mb-2">
                   <select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={{ ...sel, flex: 1 }}><option value="standard">Standard</option><option value="admin">Admin</option></select>
                 </div>
-                <div className="text-xs mb-2" style={{ color: "rgba(22,22,22,0.4)" }}>Last login: {formatLogin(u.lastLogin)}</div>
+                <div className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Last login: {formatLogin(u.lastLogin)}</div>
                 <div className="flex gap-2 mb-2">
                   <select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={{ ...sel, flex: 1 }}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select>
                   <select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} style={{ ...sel, flex: 1 }}><option value="client">Client</option><option value="research">Research</option></select>
@@ -237,8 +237,8 @@ export default function AdminPage() {
               <div key={u.email} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 mb-2" style={{ background: "var(--bg-card)", borderRadius: 10, border: "1px solid rgba(22,22,22,0.06)" }}>
                 <div>
                   <span className="text-sm">{u.email}</span>
-                  <span className="ml-2" style={{ fontSize: 10, padding: "2px 6px", borderRadius: 8, background: STATUS_STYLES.pending.bg, color: STATUS_STYLES.pending.color, fontWeight: 600 }}>Pending</span>
-                  <span className="ml-2 text-xs" style={{ color: "rgba(22,22,22,0.4)" }}>{u.role} &middot; {new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  <span className="ml-2" style={{ fontSize: 12, padding: "2px 6px", borderRadius: 8, background: STATUS_STYLES.pending.bg, color: STATUS_STYLES.pending.color, fontWeight: 600 }}>Pending</span>
+                  <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>{u.role} &middot; {new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => updateUser(u.email, { action: "activate_pending" })} className="text-xs px-3 py-1.5" style={{ borderRadius: 6, border: "1px solid #3c3b22", background: "transparent", color: "#3c3b22", cursor: "pointer" }}>Activate</button>
@@ -280,7 +280,7 @@ export default function AdminPage() {
         <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div className="modal-enter mx-4" style={{ width: 420, maxWidth: "100%", background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>{confirmAction.type === "delete" ? "Remove user?" : confirmAction.type === "suspend" ? "Suspend user?" : confirmAction.type === "revoke" ? "Revoke sessions?" : "Revoke ALL sessions?"}</h3>
-            <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>{confirmAction.type === "delete" ? `Remove ${confirmAction.name}? They will lose access immediately.` : confirmAction.type === "suspend" ? `Suspend ${confirmAction.name}? They will be signed out immediately.` : confirmAction.type === "revoke" ? `Sign ${confirmAction.name} out of all devices?` : "Sign out ALL users from all devices?"}</p>
+            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>{confirmAction.type === "delete" ? `Remove ${confirmAction.name}? They will lose access immediately.` : confirmAction.type === "suspend" ? `Suspend ${confirmAction.name}? They will be signed out immediately.` : confirmAction.type === "revoke" ? `Sign ${confirmAction.name} out of all devices?` : "Sign out ALL users from all devices?"}</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmAction(null)} className="btn-outline">Cancel</button>
               <button onClick={executeConfirm} className={confirmAction.type === "delete" ? "btn-danger" : "btn-primary"}>{confirmAction.type === "delete" ? "Remove" : confirmAction.type === "suspend" ? "Suspend" : "Revoke"}</button>

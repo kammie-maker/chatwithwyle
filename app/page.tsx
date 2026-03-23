@@ -9,11 +9,11 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button onClick={() => { navigator.clipboard.writeText(cleanText); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
       aria-label="Copy message to clipboard" title="Copy"
-      style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: copied ? "var(--color-mustard)" : "rgba(22,22,22,0.25)", transition: "color 0.15s", lineHeight: 1 }}>
+      style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: copied ? "var(--color-mustard)" : "#555", transition: "color 0.15s", lineHeight: 1, minWidth: 32, minHeight: 32 }}>
       {copied ? (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
       ) : (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
       )}
     </button>
   );
@@ -217,8 +217,8 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
   return (
     <div className="flex gap-3 max-w-[85%]">
-      <div className={`w-7 h-7 shrink-0 mt-0.5 ${isStreaming ? "avatar-streaming" : ""}`}>
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" aria-label="Wyle" role="img">
+      <div className={`shrink-0 mt-0.5 ${isStreaming ? "avatar-streaming" : ""}`} style={{ width: 40, height: 40 }}>
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 40, height: 40 }} aria-label="Wyle" role="img">
           <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
           <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
           <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
@@ -234,8 +234,8 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
         {/* Label row: INTERNAL badge and/or Draft label */}
         {(isResearch || isDraft) && (
           <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
-            {isResearch && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "#3c3b22", color: "#f8f6ee", fontWeight: 600 }}>INTERNAL</span>}
-            {isDraft && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "rgba(22,22,22,0.45)", fontWeight: 600 }}>{draftLabel}</span>}
+            {isResearch && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "#3c3b22", color: "#f8f6ee", fontWeight: 600 }}>INTERNAL</span>}
+            {isDraft && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "var(--text-muted)", fontWeight: 600 }}>{draftLabel}</span>}
           </div>
         )}
         <div className="px-4 py-3" style={isResearch || isDraft ? { paddingTop: 8 } : undefined}>
@@ -280,7 +280,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             <div className="flex flex-wrap items-center mt-3" style={{ gap: 16 }}>
               {availablePills.map(k => (
                 <button key={k} onClick={() => onExpand(k)}
-                  style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
+                  style={{ background: "none", border: "none", padding: 0, fontSize: 14, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
                   onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
                   onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
                   + {k === "REP NOTES" ? "Rep Notes" : k === "MORE DETAIL" ? "More Detail" : k === "FULL SCRIPT" ? "Full Script" : k.charAt(0) + k.slice(1).toLowerCase()}
@@ -290,7 +290,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                 <>
                   <span style={{ color: "rgba(60,59,34,0.3)", fontSize: 13 }}>&middot;</span>
                   <button onClick={onExpandAll}
-                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600, textDecoration: "none" }}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 14, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600, textDecoration: "none" }}
                     onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
                     onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
                     Expand All
@@ -324,7 +324,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             <div className="flex flex-wrap mt-2" style={{ gap: isResearch ? 16 : 8 }}>
               {isResearch ? (
                 <button onClick={() => onDraft("Draft Slack to Team")}
-                  style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
+                  style={{ background: "none", border: "none", padding: 0, fontSize: 14, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
                   onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
                   onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
                   Draft Slack to Team
@@ -332,7 +332,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               ) : (
                 MODE_ACTIONS[chatMode].map(action => (
                   <button key={action} onClick={() => onDraft(action)}
-                    style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                    style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 14, cursor: "pointer", fontFamily: "var(--font-body)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
                     onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
                     {action}
@@ -349,7 +349,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               <div className="text-xs mb-2">{parsed.clarify.question}</div>
               <div className="flex flex-wrap gap-1.5">
                 {parsed.clarify.options.map((opt, oi) => (
-                  <button key={oi} onClick={() => handleClarifyOption(opt)} className="px-2.5 py-1 text-[11px] font-medium transition-all"
+                  <button key={oi} onClick={() => handleClarifyOption(opt)} className="px-2.5 py-1 text-xs font-medium transition-all"
                     style={{ borderRadius: "14px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer" }}
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(60,59,34,0.08)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
@@ -357,11 +357,11 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   </button>
                 ))}
                 <div className="flex gap-1 w-full mt-1">
-                  <input className="flex-1 px-2 py-1 text-[11px] focus:outline-none" placeholder="Custom answer..."
+                  <input className="flex-1 px-2 py-1 text-xs focus:outline-none" placeholder="Custom answer..."
                     style={{ borderRadius: "6px", border: "1px solid rgba(22,22,22,0.1)", background: "var(--color-cream)", color: "var(--color-onyx)" }}
                     value={clarifyInput} onChange={e => setClarifyInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} />
-                  <button onClick={() => { if (clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} className="px-2 py-1 text-[11px] font-semibold"
+                  <button onClick={() => { if (clarifyInput.trim()) { handleClarifyOption(clarifyInput.trim()); setClarifyInput(""); } }} className="px-2 py-1 text-xs font-semibold"
                     style={{ borderRadius: "6px", background: "var(--color-olive)", color: "var(--color-cream)", border: "none", cursor: "pointer" }}>Send</button>
                 </div>
               </div>
@@ -1133,20 +1133,20 @@ ${context}`;
                 {/* Conversation list */}
                 <div className="flex-1 overflow-y-auto px-1.5">
                   {searchResults !== null ? (
-                    searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "rgba(248,246,238,0.3)" }}>No conversations found</div> : (
+                    searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "var(--text-muted-dark)" }}>No conversations found</div> : (
                       searchResults.map((c: Conversation & { snippet?: string }) => (
                         <button key={c.id} onClick={() => { loadConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
                           className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)", minHeight: 44 }}
                           onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                           <div className="text-xs truncate">{c.title}</div>
-                          {c.snippet && <div className="text-[10px] truncate mt-0.5" style={{ color: "rgba(248,246,238,0.35)" }}>{c.snippet.substring(0, 80)}</div>}
+                          {c.snippet && <div className="text-xs truncate mt-0.5" style={{ color: "rgba(248,246,238,0.35)" }}>{c.snippet.substring(0, 80)}</div>}
                         </button>
                       ))
                     )
                   ) : (
                     groupByDate(conversations).map(group => (
                       <div key={group.label} className="mb-2">
-                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider sticky top-0" style={{ color: "rgba(248,246,238,0.3)", background: "#161616", zIndex: 1, borderTop: group.label === "Pinned" ? "none" : "1px solid rgba(255,255,255,0.04)" }}>{group.label}</div>
+                        <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider sticky top-0" style={{ color: "var(--text-muted-dark)", background: "#161616", zIndex: 1, borderTop: group.label === "Pinned" ? "none" : "1px solid rgba(255,255,255,0.04)" }}>{group.label}</div>
                         {group.items.map(c => {
                           const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
                           const isActive = c.id === activeConvId;
@@ -1203,13 +1203,13 @@ ${context}`;
                     <span className="text-xs truncate" style={{ color: "rgba(248,246,238,0.7)", maxWidth: 160 }}>{session?.user?.name || session?.user?.email || ""}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setConfirmClearAll(true)} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer", padding: 0 }}>
+                    <button onClick={() => setConfirmClearAll(true)} className="text-xs" style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0 }}>
                       Clear history
                     </button>
-                    <button onClick={() => signOut()} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer", padding: 0 }}>
+                    <button onClick={() => signOut()} className="text-xs" style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0 }}>
                       Sign out
                     </button>
-                    {isAdminUser && <a href="/admin" className="text-[10px]" style={{ color: "rgba(248,246,238,0.25)", textDecoration: "none" }}>Admin</a>}
+                    {isAdminUser && <a href="/admin" className="text-xs" style={{ color: "var(--text-muted-dark)", textDecoration: "none" }}>Admin</a>}
                   </div>
                 </div>
               </>
@@ -1269,17 +1269,17 @@ ${context}`;
             )}
             {!convLoading && messages.length === 0 && (
               <div className="text-center py-6">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }} aria-label="Wyle" role="img">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-3" style={{ width: 80, height: 80 }} aria-label="Wyle" role="img">
                   <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
                   <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
                   <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
                 </svg>
                 <h2 className="text-base font-semibold mb-1" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>How can I help?</h2>
-                <p className="text-xs mb-4" style={{ color: "rgba(22,22,22,0.4)", maxWidth: 360, margin: "0 auto" }}>Ask about Freewyld Foundry sales, clients, pricing, or processes.</p>
+                <p className="text-xs mb-4" style={{ color: "var(--text-muted)", maxWidth: 360, margin: "0 auto" }}>Ask about Freewyld Foundry sales, clients, pricing, or processes.</p>
                 <div className="text-left" style={{ maxWidth: 600, margin: "0 auto" }}>
                   {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((group, gi) => (
                     <div key={gi} style={{ marginTop: gi > 0 ? 16 : 0 }}>
-                      <div style={{ fontSize: 11, letterSpacing: 2, color: "rgba(22,22,22,0.4)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase" }}>{group.label}</div>
+                      <div style={{ fontSize: 12, letterSpacing: 2, color: "var(--text-muted)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase" }}>{group.label}</div>
                       <div className="grid grid-cols-2 gap-2 mobile-single-col">
                         {group.items.map((q, qi) => (
                           <button key={qi} onClick={() => sendMessage(q)} disabled={streaming} className="px-3 py-2 text-xs text-left transition-all"
@@ -1301,7 +1301,7 @@ ${context}`;
                 return (
                   <div key={i} className="flex items-center justify-center my-4" style={{ gap: 12 }}>
                     <div style={{ flex: 1, height: 1, background: "rgba(22,22,22,0.08)" }} />
-                    <span style={{ fontSize: 11, color: "rgba(22,22,22,0.35)", whiteSpace: "nowrap" }}>{typeof msg.content === "string" ? msg.content : ""}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{typeof msg.content === "string" ? msg.content : ""}</span>
                     <div style={{ flex: 1, height: 1, background: "rgba(22,22,22,0.08)" }} />
                   </div>
                 );
@@ -1351,7 +1351,7 @@ ${context}`;
                       style={{ borderRadius: 8, background: "#3c3b22", color: "#f8f6ee", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                       Bring Context
                     </button>
-                    <span style={{ fontSize: 10, color: "rgba(22,22,22,0.35)", marginTop: 3 }}>Wyle will re-read this conversation and respond as {MODE_LABELS[modeSwitchPrompt]}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Wyle will re-read this conversation and respond as {MODE_LABELS[modeSwitchPrompt]}</span>
                   </div>
                 </div>
               </div>
@@ -1497,14 +1497,14 @@ ${context}`;
             {/* Top bar: Update Wyle's Knowledge + Rewrite Log */}
             <div className="shrink-0 flex items-start justify-between px-5 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(22,22,22,0.35)" }}>Recent Rewrites</div>
+                <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Recent Rewrites</div>
                 {logLoading ? (
                   <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>Loading...</div>
                 ) : logEntries.length === 0 ? (
                   <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>No rewrite history</div>
                 ) : (
                   logEntries.slice(0, 5).map((entry, i) => (
-                    <div key={i} className="text-xs" style={{ color: "rgba(22,22,22,0.45)", lineHeight: "1.6" }}>
+                    <div key={i} className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.6" }}>
                       {new Date(entry.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       {" "}<span style={{ color: "rgba(22,22,22,0.3)" }}>{entry.trigger}</span>
                     </div>
@@ -1521,7 +1521,7 @@ ${context}`;
             {/* Editor content */}
             <div className="flex-1 flex min-w-0 overflow-hidden">
             {!selectedFile ? (
-              <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "rgba(22,22,22,0.35)" }}>Select a file from the sidebar to view and edit it</p></div>
+              <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a file from the sidebar to view and edit it</p></div>
             ) : editorLoading ? (
               <div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
             ) : (
@@ -1529,7 +1529,7 @@ ${context}`;
                 {/* Left column: Chat to edit (40%) */}
                 <div className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
                   <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-                    <h3 className="text-xs font-semibold" style={{ color: "rgba(22,22,22,0.45)" }}>Chat to Edit</h3>
+                    <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
                   </div>
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     {editChatHistory.length === 0 && !editStreaming && <p className="text-xs text-center py-4" style={{ color: "rgba(22,22,22,0.3)" }}>Ask Claude to make changes to this file</p>}
