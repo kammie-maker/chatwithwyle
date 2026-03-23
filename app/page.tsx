@@ -209,7 +209,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
         <div className="px-4 py-3" style={isResearch || isDraft ? { paddingTop: 8 } : undefined}>
           {/* SIMPLE / base content */}
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
-          {isStreaming && <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} />}
+          {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
 
           {/* Inline expanded sections */}
           {allExpandKeys.map(k => {
@@ -382,6 +382,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [chatSidebarOpen, setChatSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Conversation[] | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -596,11 +597,12 @@ export default function Home() {
     setChatMode(newMode);
 
     // Add divider
-    const dividerMsg: Message = { role: "assistant", content: `Recontextualizing for ${MODE_LABELS[newMode]}`, isDivider: true, mode: newMode };
+    const dividerMsg: Message = { role: "assistant", content: `${MODE_LABELS[newMode]} is reviewing the conversation`, isDivider: true, mode: newMode };
     const recontextMsg: Message = { role: "assistant", content: "", interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` };
     setMessages(prev => [...prev, dividerMsg, recontextMsg]);
     setStreaming(true);
 
+    const dividerIdx = messages.length; // divider position
     const recontextIdx = messages.length + 1; // after divider
     const thisConvId = activeConvId;
     streamingConvRef.current = thisConvId;
@@ -631,7 +633,7 @@ export default function Home() {
       }
       fullText = cleanResponse(fullText);
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
+        setMessages(prev => { const copy = [...prev]; copy[dividerIdx] = { ...copy[dividerIdx], content: `Now in ${MODE_LABELS[newMode]}` }; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
       }
       if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
@@ -948,9 +950,16 @@ ${context}`;
   return (
     <div className="h-screen flex flex-col" style={{ background: "var(--bg-content)" }}>
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center justify-between px-5" style={{ height: 60, background: "var(--bg-header)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 8px rgba(22,22,22,0.2)" }}>
+      <header role="banner" className="shrink-0 flex items-center justify-between px-5" style={{ height: 60, background: "var(--bg-header)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 8px rgba(22,22,22,0.2)" }}>
         <div className="flex items-center gap-3">
-          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="shrink-0" style={{ width: 32, height: 32 }}>
+          {/* Mobile hamburger */}
+          {activeTab === "chat" && (
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Open conversation menu" className="hide-desktop"
+              style={{ background: "none", border: "none", color: "var(--color-cream)", cursor: "pointer", padding: 8, display: "none" }}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 20, height: 20 }}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+            </button>
+          )}
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="shrink-0" style={{ width: 32, height: 32 }} aria-label="Wyle" role="img">
             <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
             <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
             <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
@@ -1017,14 +1026,14 @@ ${context}`;
               <>
                 {/* New chat button */}
                 <div className="px-3 mb-2">
-                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); }} className="w-full py-2 text-xs font-semibold"
-                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer" }}>
+                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full py-2 text-xs font-semibold"
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", minHeight: 44 }}>
                     + New Chat
                   </button>
                 </div>
                 {/* Search */}
                 <div className="px-3 mb-2">
-                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..."
+                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
                     className="w-full px-3 py-1.5 text-xs focus:outline-none"
                     style={{ borderRadius: 6, background: "rgba(255,255,255,0.07)", border: "none", color: "rgba(248,246,238,0.85)" }} />
                 </div>
@@ -1101,8 +1110,13 @@ ${context}`;
             )}
           </div>
 
+          {/* Mobile sidebar overlay backdrop */}
+          {mobileMenuOpen && (
+            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)", display: "none" }} onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
+          )}
+
           {/* Chat content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div role="main" className="flex-1 flex flex-col overflow-hidden">
           {/* Interaction mode toggle — fixed at top center */}
           <div className="shrink-0 flex justify-center py-2" style={{ background: "var(--bg-content)" }}>
             <div style={{ display: "flex", gap: 2, background: "rgba(22,22,22,0.04)", borderRadius: 20, padding: 4 }}>
@@ -1120,7 +1134,7 @@ ${context}`;
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
+          <div role="log" aria-live="polite" aria-label="Conversation messages" className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
             {messages.length === 0 && (
               <div className="text-center py-6">
                 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }}>
@@ -1134,7 +1148,7 @@ ${context}`;
                   {(interactionMode === "research" ? RESEARCH_QUESTIONS : MODE_QUESTIONS)[chatMode].map((group, gi) => (
                     <div key={gi} style={{ marginTop: gi > 0 ? 16 : 0 }}>
                       <div style={{ fontSize: 11, letterSpacing: 2, color: "rgba(22,22,22,0.4)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase" }}>{group.label}</div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2 mobile-single-col">
                         {group.items.map((q, qi) => (
                           <button key={qi} onClick={() => sendMessage(q)} disabled={streaming} className="px-3 py-2 text-xs text-left transition-all"
                             style={{ borderRadius: "10px", background: "transparent", border: "1px solid var(--color-olive)", color: "var(--color-olive)", cursor: "pointer", lineHeight: "1.4" }}
@@ -1191,7 +1205,7 @@ ${context}`;
             {modeSwitchPrompt && (
               <div className="my-4 px-4 py-3" style={{ background: "rgba(22,22,22,0.03)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", maxWidth: 520 }}>
                 <p className="text-sm mb-3" style={{ color: "var(--color-onyx)" }}>
-                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>.
+                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>. Start fresh or bring your conversation with you?
                 </p>
                 <div className="flex gap-2 items-start">
                   <button onClick={handleModeSwitchNewChat}
@@ -1201,14 +1215,10 @@ ${context}`;
                   <div className="flex flex-col items-center">
                     <button onClick={handleModeSwitchRecontextualize}
                       style={{ borderRadius: 8, background: "#3c3b22", color: "#f8f6ee", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      Recontextualize
+                      Bring Context
                     </button>
-                    <span style={{ fontSize: 10, color: "rgba(22,22,22,0.35)", marginTop: 3 }}>See this through {MODE_LABELS[modeSwitchPrompt]}&apos;s lens</span>
+                    <span style={{ fontSize: 10, color: "rgba(22,22,22,0.35)", marginTop: 3 }}>Wyle will re-read this conversation and respond as {MODE_LABELS[modeSwitchPrompt]}</span>
                   </div>
-                  <button onClick={handleModeSwitchContinue}
-                    style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.6)", padding: "6px 16px", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
-                    Continue Here
-                  </button>
                 </div>
               </div>
             )}
@@ -1260,16 +1270,16 @@ ${context}`;
                 <button onClick={() => fileInputRef.current?.click()} disabled={streaming || pendingFiles.length >= 10} className="shrink-0 flex items-center justify-center disabled:opacity-40 transition-all"
                   style={{ width: 44, minHeight: 44, borderRadius: "12px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", cursor: "pointer", color: "var(--color-olive)" }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.color = "var(--color-mustard)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.color = "var(--color-olive)"; }} title="Attach files">
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.color = "var(--color-olive)"; }} title="Attach files" aria-label="Attach file">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
                 </button>
                 <textarea ref={textareaRef} className="flex-1 px-4 py-3 text-sm focus:outline-none transition-all" rows={1}
                   style={{ borderRadius: "12px", background: "var(--bg-card)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)", resize: "none", overflow: "hidden", maxHeight: 200 }}
                   onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
-                  placeholder="Ask Wyle anything..." value={input} onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
+                  placeholder="Ask Wyle anything..." aria-label="Message input" value={input} onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} disabled={streaming} />
-                <button onClick={handleSend} disabled={streaming || (!input.trim() && pendingFiles.length === 0)} className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
+                <button onClick={handleSend} disabled={streaming || (!input.trim() && pendingFiles.length === 0)} aria-label="Send message" className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
                   style={{ borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer", minHeight: 44 }}>
                   Send
                 </button>
@@ -1461,7 +1471,7 @@ ${context}`;
       </footer>
 
       {/* Toast */}
-      {toast && <div className="fixed bottom-14 right-6 px-4 py-2.5 text-sm font-medium shadow-lg" style={{ borderRadius: "10px", background: "var(--color-onyx)", color: "var(--color-cream)", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>{toast}</div>}
+      {toast && <div role="status" aria-live="polite" className="fixed bottom-14 right-6 px-4 py-2.5 text-sm font-medium shadow-lg toast-enter" style={{ borderRadius: "10px", background: "var(--color-onyx)", color: "var(--color-cream)", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>{toast}</div>}
 
       {/* Modals */}
       {confirmRewrite && (
