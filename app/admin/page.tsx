@@ -73,7 +73,6 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
             </select>
           </div>
           <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }} />
-          <button onClick={() => { setOpen(false); onAction("reset_defaults"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Reset Defaults</button>
           <button onClick={() => { setOpen(false); onAction("revoke"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Revoke Sessions</button>
           {user.status === "active" ? (
             <button onClick={() => { setOpen(false); onAction("suspend"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Suspend</button>
@@ -162,8 +161,7 @@ export default function AdminPage() {
     else if (type === "unsuspend") { updateUser(email, { action: "unsuspend" }); setConfirmAction(null); }
     else if (type === "revoke") updateUser(email, { action: "revoke_sessions" });
     else if (type === "revoke_all") revokeAll();
-    else if (type === "reset_defaults") { updateUser(email, { defaultMode: "sales", defaultInteraction: "client" }); setConfirmAction(null); }
-    if (type !== "unsuspend" && type !== "reset_defaults") setConfirmAction(null);
+    if (type !== "unsuspend") setConfirmAction(null);
   }
   function confirmTitle() {
     if (!confirmAction) return "";
@@ -173,7 +171,7 @@ export default function AdminPage() {
     if (t === "unsuspend") return "Restore access?";
     if (t === "revoke") return "Revoke sessions?";
     if (t === "revoke_all") return "Revoke ALL sessions?";
-    if (t === "reset_defaults") return "Reset defaults?";
+
     return "Confirm";
   }
   function confirmBody() {
@@ -184,7 +182,7 @@ export default function AdminPage() {
     if (type === "unsuspend") return `Restore access for ${name}?`;
     if (type === "revoke") return `Sign ${name} out of all devices? They will need to sign in again.`;
     if (type === "revoke_all") return "Sign out ALL users from all devices?";
-    if (type === "reset_defaults") return `Reset ${name}'s default mode and interaction to Sales / Client Interaction?`;
+
     return "";
   }
 
@@ -330,7 +328,7 @@ export default function AdminPage() {
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmAction(null)} className="btn-outline">Cancel</button>
               <button onClick={executeConfirm} className={confirmAction.type === "delete" ? "btn-danger" : "btn-primary"}>
-                {confirmAction.type === "delete" ? "Delete" : confirmAction.type === "suspend" ? "Suspend" : confirmAction.type === "unsuspend" ? "Restore" : confirmAction.type === "reset_defaults" ? "Reset" : "Confirm"}
+                {confirmAction.type === "delete" ? "Delete" : confirmAction.type === "suspend" ? "Suspend" : confirmAction.type === "unsuspend" ? "Restore" : "Confirm"}
               </button>
             </div>
           </div>
