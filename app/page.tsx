@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
+import GuideContent from "./guide/GuideContent";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -44,7 +45,7 @@ interface KbFile { id: string; name: string; modifiedDate: string }
 interface LogEntry { timestamp: string; trigger: string }
 interface EditChatMsg { role: "user" | "assistant"; text: string }
 
-type Tab = "chat" | "kb";
+type Tab = "chat" | "kb" | "guide";
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
 type InteractionMode = "client" | "research";
 
@@ -523,8 +524,11 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load user preferences on mount
+  // Load user preferences on mount + handle ?tab= URL param
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab");
+    if (tabParam === "guide" || tabParam === "kb" || tabParam === "chat") setActiveTab(tabParam);
     fetch("/api/user-preferences").then(r => r.json()).then(data => {
       if (data.default_mode && ["sales", "client-success", "fulfillment", "onboarding"].includes(data.default_mode)) setChatMode(data.default_mode as ChatMode);
       if (data.default_interaction && ["client", "research"].includes(data.default_interaction)) setInteractionMode(data.default_interaction as InteractionMode);
@@ -1249,13 +1253,6 @@ ${context}`;
                 + New Chat
               </button>
             </div>
-            {/* Guide link */}
-            <a href="/guide" style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, color: "rgba(248,246,238,0.6)", textDecoration: "none", fontSize: 13, transition: "all 0.15s" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#f8f6ee"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(248,246,238,0.6)"; }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 16, height: 16, flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-              Guide
-            </a>
             {/* Search */}
             <div className="px-3 mb-2">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
@@ -1448,6 +1445,12 @@ ${context}`;
                 Knowledge Base
               </button>
             )}
+            <button onClick={() => setActiveTab("guide")}
+              style={{ fontSize: 15, fontWeight: 500, padding: "6px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s ease",
+                background: activeTab === "guide" ? "#161616" : "transparent",
+                color: activeTab === "guide" ? "#f8f6ee" : "#777" }}>
+              Guide
+            </button>
           </div>
         </div>
 
@@ -1803,6 +1806,10 @@ ${context}`;
               </div>
             </div>
           </div>
+        )}
+        {/* ── Guide tab ── */}
+        {activeTab === "guide" && (
+          <GuideContent userRole={userRole as string || "user"} />
         )}
       </div>{/* end RIGHT ZONE */}
 
