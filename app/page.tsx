@@ -3,6 +3,22 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const cleanText = text.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/\[\[CLARIFY\]\][\s\S]*/g, "").replace(/^#{2,4}\s+\S+.*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").trim();
+  return (
+    <button onClick={() => { navigator.clipboard.writeText(cleanText); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      aria-label="Copy message to clipboard" title="Copy"
+      style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: copied ? "var(--color-mustard)" : "rgba(22,22,22,0.25)", transition: "color 0.15s", lineHeight: 1 }}>
+      {copied ? (
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+      ) : (
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+      )}
+    </button>
+  );
+}
+
 function Spinner({ size = 14, color = "currentColor" }: { size?: number; color?: string }) {
   return <svg className="animate-spin" style={{ width: size, height: size }} viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3" opacity="0.25" />
@@ -116,8 +132,11 @@ const MODE_QUESTIONS: GroupedQuestions = {
 interface ParsedSection { key: string; label: string; content: string }
 interface ParsedResponse { sections: ParsedSection[]; clarify: { question: string; options: string[] } | null; raw: string; hasStructure: boolean; hadExpandToken: boolean }
 
-const SECTION_HEADERS = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE", "STRATEGY", "ANSWER TO CLIENT", "PROBLEM", "OPTIONS", "RECOMMENDATION"];
-const EXPAND_ORDER = ["SIMPLE", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+const SECTION_HEADERS = ["SIMPLE", "MORE DETAIL", "FULL SCRIPT", "REP NOTES", "DEEPER", "DEEPEST", "INTERNAL FULL PICTURE", "INTERNAL", "STRATEGY", "ANSWER TO CLIENT", "PROBLEM", "OPTIONS", "RECOMMENDATION"];
+const EXPAND_ORDER = ["MORE DETAIL", "FULL SCRIPT", "REP NOTES"];
+// Map old names to new for backwards compat
+const SECTION_RENAME: Record<string, string> = { "DEEPER": "MORE DETAIL", "DEEPEST": "FULL SCRIPT", "INTERNAL FULL PICTURE": "REP NOTES", "INTERNAL": "REP NOTES" };
+const SECTION_DISPLAY: Record<string, string> = { "SIMPLE": "SIMPLE", "MORE DETAIL": "MORE DETAIL", "FULL SCRIPT": "FULL SCRIPT", "REP NOTES": "REP NOTES", "DEEPER": "MORE DETAIL", "DEEPEST": "FULL SCRIPT", "INTERNAL FULL PICTURE": "REP NOTES", "INTERNAL": "REP NOTES", "STRATEGY": "STRATEGY", "ANSWER TO CLIENT": "ANSWER TO CLIENT", "PROBLEM": "PROBLEM", "OPTIONS": "OPTIONS", "RECOMMENDATION": "RECOMMENDATION" };
 
 function parseResponse(text: string): ParsedResponse {
   // Detect expand token before stripping
@@ -137,13 +156,13 @@ function parseResponse(text: string): ParsedResponse {
   }
 
   const sections: ParsedSection[] = [];
-  // Match ## SIMPLE, ### SIMPLE, **SIMPLE**, or standalone SIMPLE/DEEPER/etc on its own line
-  const sectionNames = "SIMPLE|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION";
+  // Match ## headers — both old (DEEPER/DEEPEST/INTERNAL) and new (MORE DETAIL/FULL SCRIPT/REP NOTES)
+  const sectionNames = "SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION";
   const headerPattern = new RegExp("^(?:#{2,4}\\s+|\\*\\*)?(" + sectionNames + ")(?:\\*\\*)?\\s*$", "gm");
   const matches: { key: string; index: number; fullMatch: string }[] = [];
   let m;
   while ((m = headerPattern.exec(raw)) !== null) {
-    const key = m[1] === "INTERNAL" ? "INTERNAL FULL PICTURE" : m[1];
+    const key = SECTION_RENAME[m[1]] || m[1]; // Normalize old names to new
     matches.push({ key, index: m.index, fullMatch: m[0] });
   }
 
@@ -181,19 +200,19 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   clarifyInput: string; setClarifyInput: (v: string) => void;
 }) {
   const isResearch = msgInteractionMode === "research";
-  const isDraft = !!draftLabel;
+  const isDraft = !!draftLabel && (draftLabel.startsWith("Draft") || draftLabel === "Slack Draft");
   const parsed = parseResponse(text);
   const showPills = !isStreaming && !isDraft && (parsed.hasStructure || parsed.hadExpandToken);
 
   // Clean content: strip "---" horizontal rules
-  function clean(s: string) { return s.replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim(); }
+  function clean(s: string) { return s.replace(/^#{2,4}\s+(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "").replace(/^\*\*(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL)\*\*\s*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim(); }
 
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || text);
 
   // Which sections are already expanded inline
   const expandedKeys = Object.keys(inlineExpanded);
-  const allExpandKeys = isResearch ? ["DEEPER", "DEEPEST"] : ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+  const allExpandKeys = isResearch ? ["MORE DETAIL", "FULL SCRIPT"] : ["MORE DETAIL", "FULL SCRIPT", "REP NOTES"];
   const availablePills = allExpandKeys.filter(k => !expandedKeys.includes(k) && k !== expandLoading);
 
   return (
@@ -205,7 +224,13 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
         </svg>
       </div>
-      <div className="msg-bubble-assistant" style={{ overflow: "hidden", minWidth: 0 }}>
+      <div className="msg-bubble-assistant group/msg" style={{ overflow: "hidden", minWidth: 0, position: "relative" }}>
+        {/* Copy button */}
+        {!isStreaming && simpleContent && (
+          <div className="absolute top-2 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity" style={{ zIndex: 2 }}>
+            <CopyButton text={[simpleContent, ...Object.values(inlineExpanded)].join("\n\n")} />
+          </div>
+        )}
         {/* Label row: INTERNAL badge and/or Draft label */}
         {(isResearch || isDraft) && (
           <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
@@ -236,7 +261,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             return (
               <div key={k} className="section-divider">
                 <div className="text-label mb-1.5" style={{ color: "var(--color-mustard)" }}>
-                  {k === "INTERNAL FULL PICTURE" ? "INTERNAL" : k}
+                  {SECTION_DISPLAY[k] || k}
                 </div>
                 {content ? (
                   <div className="msg-content whitespace-pre-wrap">{clean(content)}</div>
@@ -258,7 +283,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", textDecoration: "none" }}
                   onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
                   onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
-                  + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
+                  + {k === "REP NOTES" ? "Rep Notes" : k === "MORE DETAIL" ? "More Detail" : k === "FULL SCRIPT" ? "Full Script" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </button>
               ))}
               {availablePills.length > 1 && (
@@ -285,7 +310,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               )}
               {availablePills.filter(k => k !== expandLoading).map(k => (
                 <span key={k} style={{ fontSize: 13, color: "rgba(60,59,34,0.3)", fontFamily: "var(--font-body)" }}>
-                  + {k === "INTERNAL FULL PICTURE" ? "Internal" : k.charAt(0) + k.slice(1).toLowerCase()}
+                  + {k === "REP NOTES" ? "Rep Notes" : k === "MORE DETAIL" ? "More Detail" : k === "FULL SCRIPT" ? "Full Script" : k.charAt(0) + k.slice(1).toLowerCase()}
                 </span>
               ))}
               {expandingAll && !expandLoading && (
@@ -743,31 +768,32 @@ export default function Home() {
     const userTextForDb = typeof userContent === "string" ? userContent : text.trim();
     if (thisConvId) saveMessage("user", userTextForDb, thisConvId);
 
+    const assistantIdx = updated.length; // index of the assistant message
+    let fullText = "";
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) });
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let fullText = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
-        // Only update UI if user is still viewing this conversation
+        // Only update UI if user is still viewing this conversation — use functional update to avoid resetting
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages([...updated, { role: "assistant", content: fullText, interactionMode, mode: chatMode }]);
+          const captured = fullText; // capture for closure
+          setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: captured }; } return copy; });
         }
       }
       fullText = cleanResponse(fullText);
-      // Final update only if still viewing
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages([...updated, { role: "assistant", content: fullText, interactionMode, mode: chatMode }]);
+        setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: fullText }; } return copy; });
       }
       // Always save to DB regardless of which conversation is displayed
       if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages([...updated, { role: "assistant", content: "Something went wrong. Please try again.", interactionMode, mode: chatMode, isError: true }]);
+        setMessages(prev => { const copy = [...prev]; if (copy[assistantIdx]) { copy[assistantIdx] = { ...copy[assistantIdx], content: fullText || "Something went wrong. Please try again.", isError: !fullText }; } return copy; });
       }
     } finally {
       streamingConvRef.current = null;
@@ -846,7 +872,7 @@ export default function Home() {
 
   async function expandAllInline(msgIdx: number) {
     const isResearch = interactionMode === "research";
-    const allKeys = isResearch ? ["DEEPER", "DEEPEST"] : ["DEEPER", "DEEPEST", "INTERNAL FULL PICTURE"];
+    const allKeys = isResearch ? ["MORE DETAIL", "FULL SCRIPT"] : ["MORE DETAIL", "FULL SCRIPT", "REP NOTES"];
     const existing = inlineExpanded[msgIdx] || {};
     const remaining = allKeys.filter(k => !existing[k]);
     if (remaining.length === 0) return;
@@ -1298,7 +1324,8 @@ ${context}`;
                       onDraft={(action) => sendDraftAction(action, i)}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
-                    <div className="inline-block msg-bubble-user text-sm" style={{ padding: hasMedia ? "0.5rem" : "0.625rem 1rem" }}>
+                    <div className="inline-block msg-bubble-user text-sm group/usrmsg relative" style={{ padding: hasMedia ? "0.5rem" : "0.625rem 1rem" }}>
+                      {userText && <div className="absolute top-1 right-1 opacity-0 group-hover/usrmsg:opacity-100 transition-opacity"><CopyButton text={userText} /></div>}
                       {imageBlocks.map((img, j) => <img key={j} src={`data:${img.source.media_type};base64,${img.source.data}`} alt="Uploaded" style={{ maxWidth: 200, borderRadius: "10px", display: "block", marginBottom: "0.5rem" }} />)}
                       {docBlocks.map((_, j) => <div key={`doc-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>PDF</div>)}
                       {fileTextBlocks.map((ftb, j) => { const fname = ftb.text.match(/^--- (.+?) ---/)?.[1] || "file"; return <div key={`ftb-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>{fname}</div>; })}

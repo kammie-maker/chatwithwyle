@@ -332,6 +332,9 @@ html { scroll-behavior: smooth; }
     display: flex !important;
   }
 
+  /* Copy buttons always visible on mobile (no hover) */
+  .group\/msg .absolute, .group\/usrmsg .absolute { opacity: 1 !important; }
+
   /* Touch targets */
   button, a, [role="button"] { min-height: 44px; min-width: 44px; }
   input, textarea, select { min-height: 44px; font-size: 16px !important; /* prevent iOS zoom */ }

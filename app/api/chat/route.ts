@@ -141,7 +141,7 @@ const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION:
 - Never write greetings or openers
 - Never wrap talk tracks in quotation marks
 - Never use dashes/hyphens for bullet points in DEEPER. Write standalone sentences with blank lines.
-- Never ask about DEEPER/DEEPEST/INTERNAL sections. [[EXPAND_PROMPT]] handles this via UI buttons. Never reference those buttons.
+- Never ask about MORE DETAIL/FULL SCRIPT/REP NOTES sections. [[EXPAND_PROMPT]] handles this via UI buttons. Never reference those buttons.
 - Never write 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' as words.
 - Never use pipe characters (|).
 - Every question is about Freewyld Foundry specifically. Never give generic industry answers. If the knowledge base lacks a Freewyld-specific answer, say so.
@@ -160,9 +160,9 @@ A direct 2-3 sentence answer. Speak to the rep. No scripts.
 - NEVER use em dashes or en dashes. Zero exceptions.
 - Never use colons, bold paragraphs, pipe characters.
 - No greetings. Mid-conversation always.
-- Never ask about DEEPER/DEEPEST/INTERNAL or reference UI buttons.
+- Never ask about MORE DETAIL/FULL SCRIPT/REP NOTES or reference UI buttons.
 - Every question is about Freewyld specifically.
-- No INTERNAL FULL PICTURE section. Everything here is already internal.`;
+- No REP NOTES section. Everything here is already internal.`;
 
 // ── Build system prompt ──
 async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode, userMessage: string): Promise<string> {
@@ -197,7 +197,7 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
   if (formatContent) parts.push("=== RESPONSE FORMAT ===\n" + formatContent);
 
   if (interactionMode === "research") {
-    parts.push("OVERRIDE: Internal Research mode. All sections speak to the rep in coaching voice. No client-facing scripts. Omit INTERNAL FULL PICTURE.");
+    parts.push("OVERRIDE: Internal Research mode. All sections speak to the rep in coaching voice. No client-facing scripts. Omit REP NOTES section.");
   }
 
   // 6. Knowledge files for this mode
