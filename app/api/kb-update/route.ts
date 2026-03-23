@@ -1,4 +1,4 @@
-import { requireAdmin } from "../require-admin";
+import { requireKbEditor } from "../require-admin";
 
 // Reference to the KB cache in /api/chat — we'll export a cache-bust timestamp
 // that /api/chat checks on each request
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { text } = body;
 
-    const { authorized } = await requireAdmin();
+    const { authorized } = await requireKbEditor();
     if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     if (!text || typeof text !== "string" || !text.trim()) {

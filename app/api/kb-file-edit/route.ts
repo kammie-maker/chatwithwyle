@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { requireAdmin } from "../require-admin";
+import { requireKbEditor } from "../require-admin";
 
 export const maxDuration = 120;
 
@@ -12,7 +12,7 @@ Mark changes using ONLY these tokens:
 Return the complete document with change markers. No preamble. No explanation. No code fences. Just the document with markers.`;
 
 export async function POST(req: Request) {
-  const { authorized } = await requireAdmin();
+  const { authorized } = await requireKbEditor();
   if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
   if (!process.env.ANTHROPIC_API_KEY) {

@@ -12,6 +12,10 @@ export function isAdmin(email: string): boolean {
   return ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
+export function isKbEditor(role: string): boolean {
+  return role === "admin" || role === "knowledge_manager";
+}
+
 async function checkUserStatus(email: string): Promise<{ allowed: boolean; role: string }> {
   const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
   const password = process.env.WYLE_PASSWORD;

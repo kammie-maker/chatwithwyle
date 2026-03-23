@@ -421,6 +421,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role;
   const isAdminUser = userRole === "admin";
+  const isKbUser = userRole === "admin" || userRole === "knowledge_manager";
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   // Conversation state
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -1058,7 +1059,7 @@ ${context}`;
               style={{ borderRadius: "6px", background: activeTab === "chat" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "chat" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
               Chat
             </button>
-            {isAdminUser && (
+            {isKbUser && (
               <button onClick={() => setActiveTab("kb")} className="px-3 py-1.5 text-xs font-medium transition-all"
                 style={{ borderRadius: "6px", background: activeTab === "kb" ? "rgba(255,255,255,0.12)" : "transparent", color: activeTab === "kb" ? "var(--color-cream)" : "rgba(237,233,225,0.5)", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>
                 Knowledge Base
@@ -1182,7 +1183,9 @@ ${context}`;
                     <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--color-cream)", flexShrink: 0 }}>
                       {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
                     </div>
-                    <span className="truncate" style={{ color: "#f8f6ee", maxWidth: 160, fontSize: 14 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                    <span className="truncate" style={{ color: "#f8f6ee", maxWidth: 130, fontSize: 14 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                    {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600 }}>Admin</span>}
+                    {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600 }}>KB</span>}
                   </div>
                   <div className="flex items-center gap-4 mt-2">
                     {isAdminUser && <a href="/admin" style={{ fontSize: 13, color: "var(--color-olive)", textDecoration: "none", background: "rgba(255,255,255,0.08)", padding: "3px 10px", borderRadius: 4 }}>Admin</a>}
@@ -1441,7 +1444,7 @@ ${context}`;
       )}
 
       {/* ── Knowledge Base tab ── */}
-      {activeTab === "kb" && isAdminUser && (
+      {activeTab === "kb" && isKbUser && (
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Source Files */}
           <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>

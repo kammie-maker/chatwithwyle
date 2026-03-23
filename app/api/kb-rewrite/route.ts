@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { requireAdmin } from "../require-admin";
+import { requireKbEditor } from "../require-admin";
 
 // Allow up to 5 minutes for the rewrite
 export const maxDuration = 300;
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
     if (!isCron) {
-      const { authorized } = await requireAdmin();
+      const { authorized } = await requireKbEditor();
       if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
     }
 

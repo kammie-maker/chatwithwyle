@@ -1,8 +1,8 @@
-import { requireAdmin } from "../require-admin";
+import { requireKbEditor } from "../require-admin";
 
 export async function GET(req: Request) {
   try {
-    const { authorized } = await requireAdmin();
+    const { authorized } = await requireKbEditor();
     if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const { authorized } = await requireAdmin();
+    const { authorized } = await requireKbEditor();
     if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const body = await req.json();

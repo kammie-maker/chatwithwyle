@@ -1,9 +1,9 @@
-import { requireAdmin } from "../require-admin";
+import { requireKbEditor } from "../require-admin";
 import { fetchAgentFiles } from "../kb-agents/route";
 
 export async function GET() {
   try {
-    const { authorized } = await requireAdmin();
+    const { authorized } = await requireKbEditor();
     if (!authorized) return Response.json({ error: "Admin access required" }, { status: 403 });
 
     const agents = await fetchAgentFiles();

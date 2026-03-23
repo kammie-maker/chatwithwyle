@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 interface User {
   email: string; name: string; firstName?: string; lastName?: string;
-  role: "admin" | "standard"; status: "active" | "suspended" | "pending";
+  role: "admin" | "knowledge_manager" | "standard"; status: "active" | "suspended" | "pending";
   lastLogin: string | null; createdAt: string;
   suspendedAt?: string | null; sessionRevokedAt?: string | null;
   defaultMode?: string; defaultInteraction?: string;
@@ -110,7 +110,7 @@ export default function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
-  const [inviteRole, setInviteRole] = useState<"standard" | "admin">("standard");
+  const [inviteRole, setInviteRole] = useState<"standard" | "knowledge_manager" | "admin">("standard");
   const [inviteMode, setInviteMode] = useState("sales");
   const [inviteInteraction, setInviteInteraction] = useState("client");
   const [inviting, setInviting] = useState(false);
@@ -232,7 +232,7 @@ export default function AdminPage() {
                 <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} /></div>
                 <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} /></div>
                 <div title={u.email} style={{ width: "30%", fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{u.email}</div>
-                <div style={{ width: "12%" }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
+                <div style={{ width: "12%" }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Standard</option><option value="knowledge_manager">Knowledge Manager</option><option value="admin">Admin</option></select></div>
                 <div style={{ width: "12%" }}><span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
                 <div style={{ width: "14%", fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
                 <div style={{ width: "8%", textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} onUpdate={updates => updateUser(u.email, updates)} /></div>
@@ -255,7 +255,7 @@ export default function AdminPage() {
                 </div>
                 <div className="text-xs mb-2" style={{ color: "rgba(22,22,22,0.5)" }}>{u.email}</div>
                 <div className="flex gap-2 mb-2">
-                  <select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={{ ...sel, flex: 1 }}><option value="standard">Standard</option><option value="admin">Admin</option></select>
+                  <select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={{ ...sel, flex: 1 }}><option value="standard">Standard</option><option value="knowledge_manager">Knowledge Manager</option><option value="admin">Admin</option></select>
                 </div>
                 <div className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Last login: {formatLogin(u.lastLogin)}</div>
                 <div className="flex gap-2 mb-2">
@@ -308,7 +308,7 @@ export default function AdminPage() {
             </div>
             <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@freewyld.com" className="w-full px-4 py-3 text-sm mb-3 focus:outline-none" style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)" }} />
             <div className="flex flex-wrap gap-3 mb-4">
-              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Role</span><select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin"|"standard")} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
+              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Role</span><select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin"|"knowledge_manager"|"standard")} style={sel}><option value="standard">Standard</option><option value="knowledge_manager">Knowledge Manager</option><option value="admin">Admin</option></select></div>
               <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "var(--text-muted)" }}>Uses Wyle for</span><select value={inviteMode} onChange={e => setInviteMode(e.target.value)} style={sel}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select></div>
               <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "var(--text-muted)" }}>Default view</span><select value={inviteInteraction} onChange={e => setInviteInteraction(e.target.value)} style={sel}><option value="client">Client Interaction</option><option value="research">Internal Research</option></select></div>
             </div>

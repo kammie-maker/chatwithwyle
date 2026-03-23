@@ -76,7 +76,7 @@ interface UserRecord {
   name: string;
   firstName?: string;
   lastName?: string;
-  role: "admin" | "standard";
+  role: "admin" | "knowledge_manager" | "standard";
   status: "active" | "suspended" | "pending";
   lastLogin: string | null;
   createdAt: string;
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
     name: [fn, ln].join(" ").trim(),
     firstName: fn,
     lastName: ln,
-    role: role as "admin" | "standard",
+    role: role as "admin" | "knowledge_manager" | "standard",
     status: "pending",
     lastLogin: null,
     createdAt: new Date().toISOString(),
