@@ -3,82 +3,67 @@ import { getServerSession } from "next-auth";
 import { getLastKbUpdate } from "../kb-update/route";
 import { getLastRewrite } from "../kb-rewrite/route";
 
-// ── Unified file cache — fetch all needed files in ONE call ──
-interface CachedFiles {
-  persona: string;
-  sales: string;
-  ceo: string;
-  revenueExpert: string;
-  skillSales: string;
-  skillClientSuccess: string;
-  skillFulfillment: string;
-  skillOnboarding: string;
-  fetchedAt: number;
-}
-
-let fileCache: CachedFiles | null = null;
+// ── File cache ──
+interface CachedFiles { [key: string]: string }
+let fileCache: { data: CachedFiles; fetchedAt: number } | null = null;
 let kbCache: { text: string; fetchedAt: number } | null = null;
 const CACHE_TTL = 60 * 60 * 1000;
 
-// Exact files we need — keyed by file ID for direct fetch (no list_files needed)
-const FILE_IDS: Record<string, string> = {
+// All files by ID — fetched in parallel on cold cache
+const ALL_FILE_IDS: Record<string, string> = {
+  // Core
   "Persona-Wyle.md": "1fB36Og4zWv8ZbNcP3-ZjvgllDz6YHq5A",
+  // Agents
   "Agent-Sales.md": "1AMagcPRL3_gMVDsjVXj_e5zfYcJYa3sG",
   "Agent-CEO.md": "1m4YMdlb3u0SjNvHs_ISKJB4Gl3G6y6C8",
   "Agent-RevenueExpert.md": "1CwJ5WtPWd971CJoNK38vmg4Sg8PUNFut",
-  "Skill-Sales.md": "1L3l2rQyj4hmRzGKPF78FdAxHKASYwyxx",
-  "Skill-ClientSuccess.md": "1IioAVstYQ5Y91dKpA8OY0ecmm6rJ3xnZ",
-  "Skill-Fulfillment.md": "1jHFGc9g5mMZPSohr_WtzZ48VoIKRGa1E",
-  "Skill-Onboarding.md": "1BNn5kKsmObMFZxLFxVHj7S71MRnhYKXP",
+  // Format files
+  "Format-ClientFacing.md": "1HQHg4jYb55lWWzh_y6ixFvh9b7KATpTd",
+  "Format-Fulfillment.md": "1S8JrljaV7k3gicsQq91_3boZzeUX8VOn",
+  // Knowledge files
+  "Knowledge-Objections.md": "1uhEDasCiN0L_tG0oNPD7sfqUtmiodHB4",
+  "Knowledge-Pricing.md": "1BBA9T447Vzamhg8sfaPRM6mZ3q-1TqxU",
+  "Knowledge-Closing.md": "1kpfWuruhk18_s2KIhr6-KuDNrDHO2pqM",
+  "Knowledge-ClientRetention.md": "1_WB0NEGXbHgJdZoe1GIvVEnA3Yja_Oha",
+  "Knowledge-Reporting.md": "12Sz4jgVwP9glNqjBN7ka2a5dWk8Pv4pr",
+  "Knowledge-RevenueStrategy.md": "10ehDqG8fCzshwwWE4hIkDsts9NIAzOai",
+  "Knowledge-ClientCommunication.md": "1mvbBjDDc7FRtranvQOrdVCj-CkiZ3dqb",
+  "Knowledge-Onboarding.md": "1B7RwNPhrwuzLbaxoPw-Bpp9Ed-bhV_Tu",
+  // SOURCE pricing/contract docs (verbatim, loaded only when needed)
+  "SOURCE-Contract.md": "1jrVfwpCcV8LjX3bdBTW1KUbeo2_84CRs",
+  "SOURCE-FeeCalc.md": "1cQ_JIEFiRI1A8DPvmL8o2CLestukurcI",
+  "SOURCE-FeeNegotiation.md": "1xMTxBj6F-Gt1_U9X9g7xl0ZzYkJta3He",
+  "SOURCE-Guarantee.md": "14nb9ph-RFY0Fpv0IBa7EeYov7F2-eZcs",
+  "SOURCE-RevenueEstimate.md": "1cCEBI9Cm4usyO-4TiBym8hGuU_L7hTDR",
 };
 
-
 async function fetchAllFiles(): Promise<CachedFiles> {
-  if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache;
+  if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache.data;
 
   const t0 = Date.now();
   const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
   const password = process.env.WYLE_PASSWORD;
-  if (!webhookUrl || !password) return emptyFiles();
+  if (!webhookUrl || !password) return {};
 
   try {
-    // Fetch all needed files in parallel by ID — no list_files call needed
-    const entries = Object.entries(FILE_IDS);
-
+    const entries = Object.entries(ALL_FILE_IDS);
     const results = await Promise.all(entries.map(async ([name, id]) => {
       const r = await fetch(webhookUrl, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "get_file", fileId: id, password }), redirect: "follow",
       });
       const d = await r.json();
-      return { name, content: d.content || "" };
+      return [name, d.content || ""] as [string, string];
     }));
 
-    const find = (name: string) => results.find(r => r.name === name)?.content || "";
-
-    const result: CachedFiles = {
-      persona: find("Persona-Wyle.md"),
-      sales: find("Agent-Sales.md"),
-      ceo: find("Agent-CEO.md"),
-      revenueExpert: find("Agent-RevenueExpert.md"),
-      skillSales: find("Skill-Sales.md"),
-      skillClientSuccess: find("Skill-ClientSuccess.md"),
-      skillFulfillment: find("Skill-Fulfillment.md"),
-      skillOnboarding: find("Skill-Onboarding.md"),
-      fetchedAt: Date.now(),
-    };
-
-    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${entries.length} files)`);
-    fileCache = result;
-    return result;
+    const data: CachedFiles = Object.fromEntries(results);
+    console.log(`[chat] All files fetched in ${Date.now() - t0}ms (${entries.length} files)`);
+    fileCache = { data, fetchedAt: Date.now() };
+    return data;
   } catch (err) {
     console.log(`[chat] Files fetch error (${Date.now() - t0}ms): ${err}`);
-    return fileCache || emptyFiles();
+    return fileCache?.data || {};
   }
-}
-
-function emptyFiles(): CachedFiles {
-  return { persona: "", sales: "", ceo: "", revenueExpert: "", skillSales: "", skillClientSuccess: "", skillFulfillment: "", skillOnboarding: "", fetchedAt: 0 };
 }
 
 async function fetchKnowledgeBase(): Promise<string> {
@@ -88,20 +73,19 @@ async function fetchKnowledgeBase(): Promise<string> {
 
   const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
   const password = process.env.WYLE_PASSWORD;
-  const masterId = "1IjtO_gdiK2-lFevZ66E6KRTuzy-J89xp";
   if (!webhookUrl || !password) return "";
 
   const t0 = Date.now();
   try {
     const res = await fetch(webhookUrl, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_file", fileId: masterId, password }), redirect: "follow",
+      body: JSON.stringify({ action: "get_file", fileId: "1IjtO_gdiK2-lFevZ66E6KRTuzy-J89xp", password }), redirect: "follow",
     });
     const data = await res.json();
     let text = data.content || "";
     text = text.replace(/^.*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*$/gm, "");
     text = text.replace(/^.*[A-Z][a-z]+\s+[A-Z][a-z]+.*\$[\d,]+.*$/gm, "");
-    console.log(`[chat] KB fetched via webhook in ${Date.now() - t0}ms: ${text.length.toLocaleString()} chars`);
+    console.log(`[chat] KB fetched in ${Date.now() - t0}ms: ${text.length.toLocaleString()} chars`);
     kbCache = { text, fetchedAt: Date.now() };
     return text;
   } catch (err) { console.log(`[chat] KB fetch error: ${err}`); return kbCache?.text || ""; }
@@ -111,139 +95,150 @@ async function fetchKnowledgeBase(): Promise<string> {
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
 type InteractionMode = "client" | "research";
 
+// ── Mode routing ──
 const MODE_ROUTING: Record<ChatMode, string> = {
-  sales: "You are operating in Sales Mode. The Sales Agent leads all responses. Draw on the Revenue Expert for data-backed justifications. Draw on the CEO Agent when vision, culture, or brand story adds weight to a close. Your goal: help the rep close the deal on this call.",
-  "client-success": "You are operating in Client Success Mode. The Revenue Expert leads all responses. Draw on the CEO Agent for culture and relationship context. Draw on the Sales Agent only when retention or upsell is relevant. Your goal: help the CS team strengthen client relationships and resolve issues.",
-  fulfillment: "You are operating in Revenue Management Mode. The Revenue Expert leads all responses. Draw on the CEO Agent for culture and standards context. Your goal: help the fulfillment team execute revenue management with precision and consistency.",
-  onboarding: "You are operating in Onboarding Mode. The Revenue Expert and Sales Agent share the lead. Draw on the CEO Agent for culture and expectation-setting. Your goal: help the team set new clients up for success and establish strong foundations.",
+  sales: "You are operating in Sales Mode. The Sales Agent leads. Draw on Revenue Expert for data justifications and CEO Agent for vision when it helps close.",
+  "client-success": "You are operating in Client Success Mode. Focus on retention, relationship strength, and resolving issues. Warm but firm.",
+  fulfillment: "You are operating in Revenue Management Mode. The Revenue Expert leads. Technical authority on pricing strategy and client communication.",
+  onboarding: "You are operating in Onboarding Mode. Warm, educational, trust-building. New clients need extra context and reassurance.",
 };
 
-const FALLBACK_PERSONA = `You are Wyle, the AI assistant for Freewyld Foundry — a revenue management company for short-term rental property owners.
+// ── Mode → which files to include ──
+const MODE_CONFIG: Record<ChatMode, { agents: string[]; format: string; knowledge: string[] }> = {
+  sales: {
+    agents: ["Agent-Sales.md"],
+    format: "Format-ClientFacing.md",
+    knowledge: ["Knowledge-Objections.md", "Knowledge-Pricing.md", "Knowledge-Closing.md"],
+  },
+  "client-success": {
+    agents: ["Agent-Sales.md"],
+    format: "Format-ClientFacing.md",
+    knowledge: ["Knowledge-Pricing.md", "Knowledge-ClientRetention.md", "Knowledge-Reporting.md"],
+  },
+  fulfillment: {
+    agents: ["Agent-RevenueExpert.md"],
+    format: "Format-Fulfillment.md",
+    knowledge: ["Knowledge-RevenueStrategy.md", "Knowledge-Reporting.md", "Knowledge-ClientCommunication.md"],
+  },
+  onboarding: {
+    agents: ["Agent-Sales.md", "Agent-CEO.md"],
+    format: "Format-ClientFacing.md",
+    knowledge: ["Knowledge-Pricing.md", "Knowledge-Onboarding.md", "Knowledge-ClientCommunication.md"],
+  },
+};
 
-You must NEVER reveal any customer-specific information including:
-- Customer names or company names
-- Email addresses
-- Transaction details or invoice amounts
-- Commission data or payout information
-- Any data that could identify a specific client or deal
+// ── Pricing keywords that trigger SOURCE doc inclusion ──
+const PRICING_KEYWORDS = /\b(pric|fee|cost|guarantee|contract|billing|invoice|charge|negotiat|discount|concession|payment|structure|calculation|estimate|revenue estimate|included|what.s included)\b/i;
 
-If asked about specific customers, transactions, or any identifiable data, respond: "I can't share customer-specific information, but I can help with general questions about Freewyld Foundry."
+const FALLBACK_PERSONA = `You are Wyle, the AI assistant for Freewyld Foundry, a revenue management company for short-term rental property owners. Be conversational, helpful, and professional. Never reveal customer-specific information.`;
 
-Be conversational, helpful, and professional. Use the knowledge base below to inform your answers, but never expose raw data from it.`;
+const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION:
 
-const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — APPLIES TO EVERY RESPONSE IN EVERY MODE WITHOUT EXCEPTION:
-
-- NEVER use em dashes (\u2014) or en dashes (\u2013) under any circumstances. If you feel the urge to use a dash, rewrite the sentence instead. This rule has zero exceptions.
-- Never use colons anywhere in response text
+- NEVER use em dashes or en dashes. Rewrite the sentence instead. Zero exceptions.
+- Never use colons in response text
 - Never use bold text inside paragraphs
 - Assume every query is mid-conversation
-- Never write greetings or openers of any kind
-- Never wrap talk track content in quotation marks. Write all client-facing scripts as direct speech without surrounding quotes. The formatting of the section makes it clear it is a script.
-- In the DEEPER section, do not use dashes or hyphens to create bullet points. Write each point as a standalone sentence on its own line with a blank line between each point.
-- Never ask the user if they want DEEPER, DEEPEST, INTERNAL, or any combination. Never write any sentence that prompts the user to request more sections. The [[EXPAND_PROMPT]] token is the only indicator that more sections are available. It is replaced by buttons in the UI. Never describe or reference those buttons in your response text.
-- Never write the text 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' or any combination of these as words in your response. These are UI buttons rendered by the interface. Never reference them in response text.
-- Never use a pipe character (|) anywhere in any response.
-- Every question asked is assumed to be about Freewyld Foundry specifically. Never answer in general terms about the STR industry or sales in general. Always anchor answers to Freewyld's specific service, clients, results, pricing, guarantee, team, and processes. If asked about objections, answer with the objections Freewyld's sales team actually hears. If asked about results, answer with Freewyld's actual client results. If asked about process, answer with Freewyld's actual process. If the knowledge base does not contain a Freewyld-specific answer to a question, say 'I don't have enough Freewyld-specific information on that yet. Try adding it to the knowledge base or ask a more specific question.' Never substitute a generic industry answer when a Freewyld-specific answer is not available.
+- Never write greetings or openers
+- Never wrap talk tracks in quotation marks
+- Never use dashes/hyphens for bullet points in DEEPER. Write standalone sentences with blank lines.
+- Never ask about DEEPER/DEEPEST/INTERNAL sections. [[EXPAND_PROMPT]] handles this via UI buttons. Never reference those buttons.
+- Never write 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' as words.
+- Never use pipe characters (|).
+- Every question is about Freewyld Foundry specifically. Never give generic industry answers. If the knowledge base lacks a Freewyld-specific answer, say so.
 
-All other formatting and structural rules are defined by the active Skill file for the current chat mode. Follow the Skill file instructions exactly.`;
+Follow the active Format and Skill file rules exactly.`;
 
 const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — INTERNAL RESEARCH MODE:
 
-You are speaking directly to the Freewyld team member, not to a client. Do not write client-facing scripts. Write coaching, strategy, context, and analysis.
-
-Structure every response exactly like this:
+You are speaking directly to the Freewyld team member. Write coaching, strategy, context, and analysis.
 
 ## SIMPLE
-A direct, concise answer to the question in 2-3 sentences. Speak to the rep. No scripts.
+A direct 2-3 sentence answer. Speak to the rep. No scripts.
 
 [[EXPAND_PROMPT]]
 
-FORMATTING RULES:
-- NEVER use em dashes or en dashes under any circumstances. Rewrite the sentence instead. Zero exceptions.
-- Never use colons in response text
-- Never use bold text inside paragraphs
-- Assume mid-conversation
-- No greetings
-- Never ask the user if they want DEEPER, DEEPEST, INTERNAL, or any combination. Never write any sentence that prompts the user to request more sections. The [[EXPAND_PROMPT]] token is the only indicator. Never describe or reference expand buttons in your response text.
-- Never write the text 'Draft Text', 'Draft Email', 'Draft Voicemail', 'Draft Slack Message' or any combination as words in your response. These are UI buttons. Never reference them.
-- Never use a pipe character (|) anywhere in any response.
-- Every question is about Freewyld Foundry specifically. Never answer in general terms. If the knowledge base does not contain a Freewyld-specific answer, say so.
-- No INTERNAL FULL PICTURE section. Everything here is already internal`;
-
-// ── Mode-specific agent selection ──
-const MODE_AGENTS: Record<ChatMode, string[]> = {
-  sales: ["sales"],
-  "client-success": ["sales"],
-  fulfillment: ["revenueExpert"],
-  onboarding: ["sales", "ceo"],
-};
+- NEVER use em dashes or en dashes. Zero exceptions.
+- Never use colons, bold paragraphs, pipe characters.
+- No greetings. Mid-conversation always.
+- Never ask about DEEPER/DEEPEST/INTERNAL or reference UI buttons.
+- Every question is about Freewyld specifically.
+- No INTERNAL FULL PICTURE section. Everything here is already internal.`;
 
 // ── Build system prompt ──
-async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode = "client"): Promise<string> {
+async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode, userMessage: string): Promise<string> {
   const t0 = Date.now();
   const [files, kb] = await Promise.all([fetchAllFiles(), fetchKnowledgeBase()]);
   const t1 = Date.now();
 
-  const persona = files.persona || FALLBACK_PERSONA;
-  const routing = MODE_ROUTING[mode] || MODE_ROUTING.sales;
+  const config = MODE_CONFIG[mode];
   const parts: string[] = [];
 
-  // 0. Format instruction
+  // 1. Format instruction
   parts.push(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION);
 
-  // 1. Persona
-  parts.push("=== WYLE PERSONA & VOICE ===\n" + persona);
+  // 2. Persona
+  parts.push("=== PERSONA ===\n" + (files["Persona-Wyle.md"] || FALLBACK_PERSONA));
 
-  // 2. Mode-specific agents only (cap at 10K each)
-  const AGENT_MAX = 10000;
-  const cap = (s: string) => s.length > AGENT_MAX ? s.slice(0, AGENT_MAX) + "\n\n[truncated]" : s;
-  const agentKeys = MODE_AGENTS[mode] || ["sales"];
-  const agentMap: Record<string, { label: string; content: string }> = {
-    sales: { label: "SALES", content: files.sales },
-    ceo: { label: "CEO (ERIC)", content: files.ceo },
-    revenueExpert: { label: "REVENUE EXPERT", content: files.revenueExpert },
-  };
-  for (const key of agentKeys) {
-    const agent = agentMap[key];
-    if (agent?.content) parts.push("=== AGENT: " + agent.label + " ===\n" + cap(agent.content));
-  }
-
-  // 3. Mode routing
-  parts.push("=== MODE INSTRUCTIONS ===\n" + routing);
-
-  // 4. Skill file
-  const SKILL_MAP: Record<ChatMode, string> = {
-    sales: files.skillSales,
-    "client-success": files.skillClientSuccess,
-    fulfillment: files.skillFulfillment,
-    onboarding: files.skillOnboarding,
-  };
-  const skill = SKILL_MAP[mode];
-  if (skill) {
-    parts.push("=== RESPONSE FORMAT (Skill File) ===\n" + skill);
-    if (interactionMode === "research") {
-      parts.push("OVERRIDE: You are in Internal Research mode. All sections (SIMPLE, DEEPER, DEEPEST) speak directly to the rep in coaching voice. Do not write client-facing scripts in any section. Omit the INTERNAL FULL PICTURE section entirely.");
+  // 3. Mode-specific agent(s) — cap at 8K each
+  const AGENT_MAX = 8000;
+  for (const agentName of config.agents) {
+    const content = files[agentName] || "";
+    if (content) {
+      const label = agentName.replace("Agent-", "").replace(".md", "").toUpperCase();
+      parts.push("=== AGENT: " + label + " ===\n" + (content.length > AGENT_MAX ? content.slice(0, AGENT_MAX) + "\n[truncated]" : content));
     }
   }
 
-  // 5. Compiled KB — minimal supplementary context (knowledge is now in Skill files)
-  if (kb) {
-    const KB_MAX = 10000;
-    const kbText = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n\n[KB truncated]" : kb;
-    parts.push("=== SUPPLEMENTARY KNOWLEDGE BASE ===\n" + kbText);
+  // 4. Mode routing
+  parts.push("=== MODE ===\n" + (MODE_ROUTING[mode] || ""));
+
+  // 5. Format file
+  const formatContent = files[config.format] || "";
+  if (formatContent) parts.push("=== RESPONSE FORMAT ===\n" + formatContent);
+
+  if (interactionMode === "research") {
+    parts.push("OVERRIDE: Internal Research mode. All sections speak to the rep in coaching voice. No client-facing scripts. Omit INTERNAL FULL PICTURE.");
+  }
+
+  // 6. Knowledge files for this mode
+  for (const kName of config.knowledge) {
+    const content = files[kName] || "";
+    if (content) {
+      const label = kName.replace("Knowledge-", "").replace(".md", "");
+      parts.push("=== KNOWLEDGE: " + label + " ===\n" + content);
+    }
+  }
+
+  // 7. SOURCE pricing/contract docs — ONLY when the question involves pricing/contracts
+  if (PRICING_KEYWORDS.test(userMessage)) {
+    const sourceFiles = ["SOURCE-Contract.md", "SOURCE-FeeCalc.md", "SOURCE-FeeNegotiation.md", "SOURCE-Guarantee.md", "SOURCE-RevenueEstimate.md"];
+    const sourceParts: string[] = [];
+    for (const sf of sourceFiles) {
+      if (files[sf]) sourceParts.push("--- " + sf + " ---\n" + files[sf]);
+    }
+    if (sourceParts.length > 0) {
+      parts.push("=== AUTHORITATIVE SOURCE DOCUMENTS ===\nThese are the exact Freewyld pricing, contract, and guarantee documents. Use ONLY these for pricing/fee/guarantee/contract questions. Never guess or generalize.\n\n" + sourceParts.join("\n\n"));
+    }
+    console.log(`[chat] Pricing keywords detected — SOURCE docs included (${sourceParts.reduce((s, p) => s + p.length, 0)} chars)`);
+  }
+
+  // 8. Supplementary KB — only if room
+  const currentLen = parts.join("\n\n").length;
+  if (kb && currentLen < 60000) {
+    const KB_MAX = Math.min(80000 - currentLen, 10000);
+    if (KB_MAX > 2000) {
+      const kbText = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n[KB truncated]" : kb;
+      parts.push("=== SUPPLEMENTARY KB ===\n" + kbText);
+    }
   }
 
   let total = parts.join("\n\n");
-
-  // Hard cap: never exceed 100K
-  if (total.length > 100000) {
-    console.log(`[chat] WARNING: Prompt ${total.length.toLocaleString()} chars exceeds 100K. Hard truncating.`);
-    total = total.slice(0, 100000) + "\n\n[System prompt truncated at 100,000 characters]";
+  if (total.length > 80000) {
+    total = total.slice(0, 80000) + "\n\n[Prompt truncated at 80K]";
   }
 
-  // Debug: log each component size
-  const agentSize = agentKeys.reduce((sum, k) => sum + Math.min((agentMap[k]?.content || "").length, AGENT_MAX), 0);
-  console.log(`[chat] Prompt: persona=${persona.length}, agents=${agentSize} (${agentKeys.join("+")}), skill=${(skill||"").length}, kb=${Math.min(kb?.length || 0, 10000)}. Total=${total.length.toLocaleString()} chars. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
+  const knowledgeChars = config.knowledge.reduce((s, k) => s + (files[k]?.length || 0), 0);
+  console.log(`[chat] Prompt: agents=${config.agents.length}, knowledge=${knowledgeChars}, format=${formatContent.length}, total=${total.length.toLocaleString()} chars. Mode: ${mode}/${interactionMode}. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
 
   return total;
 }
@@ -261,9 +256,13 @@ export async function POST(req: Request) {
     const validMode = (["sales", "client-success", "fulfillment", "onboarding"].includes(mode) ? mode : "sales") as ChatMode;
     const validInteraction = (interactionMode === "research" ? "research" : "client") as InteractionMode;
 
-    const systemPrompt = await buildSystemPrompt(validMode, validInteraction);
-    const t1 = Date.now();
-    console.log(`[chat] Prompt ready at +${t1 - t0}ms. Calling Claude...`);
+    // Extract last user message for keyword detection
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lastUserMsg = (messages as any[]).filter(m => m.role === "user").pop();
+    const userText = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
+
+    const systemPrompt = await buildSystemPrompt(validMode, validInteraction, userText);
+    console.log(`[chat] Prompt ready at +${Date.now() - t0}ms. Calling Claude...`);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const stream = await client.messages.stream({
