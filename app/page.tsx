@@ -494,10 +494,11 @@ export default function Home() {
     } catch { /* ignore */ }
   }
 
-  async function saveMessage(role: string, content: string) {
-    if (!activeConvId) return;
+  async function saveMessage(role: string, content: string, convId?: string | null) {
+    const id = convId || activeConvId;
+    if (!id) return;
     try {
-      await fetch(`/api/conversations/${activeConvId}/messages`, {
+      await fetch(`/api/conversations/${id}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role, content, interaction_mode: interactionMode }),
       });
@@ -632,7 +633,7 @@ export default function Home() {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
       }
-      if (thisConvId) saveMessage("assistant", fullText);
+      if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: "Failed to recontextualize.", interactionMode, mode: newMode }; return copy; });
@@ -677,7 +678,7 @@ export default function Home() {
 
     // Save user message
     const userTextForDb = typeof userContent === "string" ? userContent : text.trim();
-    if (thisConvId) saveMessage("user", userTextForDb);
+    if (thisConvId) saveMessage("user", userTextForDb, thisConvId);
 
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) });
@@ -700,7 +701,7 @@ export default function Home() {
         setMessages([...updated, { role: "assistant", content: fullText, interactionMode, mode: chatMode }]);
       }
       // Always save to DB regardless of which conversation is displayed
-      if (thisConvId) saveMessage("assistant", fullText);
+      if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode, mode: chatMode }]);
@@ -906,7 +907,7 @@ ${context}`;
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: fullText, interactionMode, draftLabel: label }; return copy; });
       }
-      if (thisConvId) saveMessage("assistant", fullText);
+      if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
         setMessages(prev => { const copy = [...prev]; copy[draftIdx] = { role: "assistant", content: "Failed to generate draft.", interactionMode, draftLabel: label }; return copy; });
