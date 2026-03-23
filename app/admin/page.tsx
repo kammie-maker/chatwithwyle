@@ -27,46 +27,61 @@ function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v:
 
 function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type: string) => void; onUpdate: (updates: Record<string, string>) => void }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    function close(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    if (open) document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    if (!open) return;
+    function close(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node) && btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false); }
+    function esc(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
   }, [open]);
-  const menuBtn = "w-full text-left px-4 py-2.5 text-xs transition-all";
-  const menuStyle = { background: "transparent" as string, border: "none" as string, cursor: "pointer" as string, color: "var(--color-onyx)" };
-  const hover = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "rgba(0,0,0,0.03)";
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 220) });
+    }
+    setOpen(!open);
+  }
+
+  const itemStyle = { display: "flex", alignItems: "center", width: "100%", textAlign: "left" as const, padding: "0 16px", height: 40, fontSize: 14, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-onyx)", transition: "background 0.1s" };
+  const hover = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "rgba(0,0,0,0.05)";
   const unhover = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "transparent";
+  const selStyle = { fontSize: 13, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(0,0,0,0.1)", background: "#fff", width: "100%", cursor: "pointer" };
+
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(!open)} aria-label="User actions" style={{ background: "none", border: "1px solid rgba(22,22,22,0.12)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 16, color: "rgba(22,22,22,0.5)", lineHeight: 1 }}>&hellip;</button>
+    <div style={{ position: "relative" }}>
+      <button ref={btnRef} onClick={toggle} aria-label="User actions" style={{ background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 18, color: "#555", lineHeight: 1, minHeight: 36, minWidth: 36 }}>&hellip;</button>
       {open && (
-        <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "var(--bg-card)", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 20, minWidth: 200, overflow: "hidden" }}>
+        <div ref={ref} style={{ position: "fixed", top: pos.top, left: pos.left, background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,0.1)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 9999, minWidth: 220, overflow: "hidden" }}>
           {/* Default Mode */}
-          <div className="px-4 py-2 text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "1px" }}>Default Mode</div>
-          <div className="px-4 pb-2">
-            <select value={user.defaultMode || "sales"} onChange={e => { onUpdate({ defaultMode: e.target.value }); }} onClick={e => e.stopPropagation()}
-              style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
+          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>Default Mode</div>
+          <div style={{ padding: "0 16px 10px" }}>
+            <select value={user.defaultMode || "sales"} onChange={e => onUpdate({ defaultMode: e.target.value })} onClick={e => e.stopPropagation()} style={selStyle}>
               <option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option>
             </select>
           </div>
           {/* Default Interaction */}
-          <div className="px-4 py-2 text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "1px", borderTop: "1px solid rgba(22,22,22,0.06)" }}>Default Interaction</div>
-          <div className="px-4 pb-2">
-            <select value={user.defaultInteraction || "client"} onChange={e => { onUpdate({ defaultInteraction: e.target.value }); }} onClick={e => e.stopPropagation()}
-              style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
+          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", borderTop: "1px solid rgba(0,0,0,0.06)" }}>Default Interaction</div>
+          <div style={{ padding: "0 16px 10px" }}>
+            <select value={user.defaultInteraction || "client"} onChange={e => onUpdate({ defaultInteraction: e.target.value })} onClick={e => e.stopPropagation()} style={selStyle}>
               <option value="client">Client Interaction</option><option value="research">Internal Research</option>
             </select>
           </div>
-          <div style={{ borderTop: "1px solid rgba(22,22,22,0.06)" }} />
-          <button onClick={() => { setOpen(false); onAction("revoke"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Revoke Sessions</button>
+          <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }} />
+          <button onClick={() => { setOpen(false); onAction("reset_defaults"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Reset Defaults</button>
+          <button onClick={() => { setOpen(false); onAction("revoke"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Revoke Sessions</button>
           {user.status === "active" ? (
-            <button onClick={() => { setOpen(false); onAction("suspend"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Suspend</button>
+            <button onClick={() => { setOpen(false); onAction("suspend"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Suspend</button>
           ) : (
-            <button onClick={() => { setOpen(false); onAction("unsuspend"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Unsuspend</button>
+            <button onClick={() => { setOpen(false); onAction("unsuspend"); }} style={itemStyle} onMouseEnter={hover} onMouseLeave={unhover}>Unsuspend</button>
           )}
-          <button onClick={() => { setOpen(false); onAction("delete"); }} className={menuBtn} style={{ ...menuStyle, color: "#b91c1c", borderTop: "1px solid rgba(22,22,22,0.06)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(180,30,30,0.04)"} onMouseLeave={unhover}>Delete</button>
+          <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)" }} />
+          <button onClick={() => { setOpen(false); onAction("delete"); }} style={{ ...itemStyle, color: "#663925" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.05)"} onMouseLeave={unhover}>Delete User</button>
         </div>
       )}
     </div>
@@ -137,10 +152,41 @@ export default function AdminPage() {
   async function inviteUser() { if (!inviteEmail.trim()) return; setInviting(true); try { const r = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole, firstName: inviteFirstName.trim(), lastName: inviteLastName.trim(), defaultMode: inviteMode, defaultInteraction: inviteInteraction }) }); const d = await r.json(); if (d.error) { setToast(d.error); setInviting(false); return; } setToast("Invitation sent"); setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); setShowInvite(false); loadUsers(); } catch { setToast("Invite failed"); } finally { setInviting(false); } }
 
   function handleAction(user: User, type: string) {
-    if (type === "unsuspend") { updateUser(user.email, { action: "unsuspend" }); return; }
     setConfirmAction({ type, email: user.email, name: user.name || user.email });
   }
-  function executeConfirm() { if (!confirmAction) return; if (confirmAction.type === "delete") deleteUser(confirmAction.email); else if (confirmAction.type === "suspend") updateUser(confirmAction.email, { action: "suspend" }); else if (confirmAction.type === "revoke") updateUser(confirmAction.email, { action: "revoke_sessions" }); else if (confirmAction.type === "revoke_all") revokeAll(); setConfirmAction(null); }
+  function executeConfirm() {
+    if (!confirmAction) return;
+    const { type, email } = confirmAction;
+    if (type === "delete") deleteUser(email);
+    else if (type === "suspend") updateUser(email, { action: "suspend" });
+    else if (type === "unsuspend") { updateUser(email, { action: "unsuspend" }); setConfirmAction(null); }
+    else if (type === "revoke") updateUser(email, { action: "revoke_sessions" });
+    else if (type === "revoke_all") revokeAll();
+    else if (type === "reset_defaults") { updateUser(email, { defaultMode: "sales", defaultInteraction: "client" }); setConfirmAction(null); }
+    if (type !== "unsuspend" && type !== "reset_defaults") setConfirmAction(null);
+  }
+  function confirmTitle() {
+    if (!confirmAction) return "";
+    const t = confirmAction.type;
+    if (t === "delete") return "Delete user?";
+    if (t === "suspend") return "Suspend user?";
+    if (t === "unsuspend") return "Restore access?";
+    if (t === "revoke") return "Revoke sessions?";
+    if (t === "revoke_all") return "Revoke ALL sessions?";
+    if (t === "reset_defaults") return "Reset defaults?";
+    return "Confirm";
+  }
+  function confirmBody() {
+    if (!confirmAction) return "";
+    const { type, name } = confirmAction;
+    if (type === "delete") return `Permanently delete ${name}? This cannot be undone.`;
+    if (type === "suspend") return `Suspend ${name}? They will be immediately signed out and unable to log back in.`;
+    if (type === "unsuspend") return `Restore access for ${name}?`;
+    if (type === "revoke") return `Sign ${name} out of all devices? They will need to sign in again.`;
+    if (type === "revoke_all") return "Sign out ALL users from all devices?";
+    if (type === "reset_defaults") return `Reset ${name}'s default mode and interaction to Sales / Client Interaction?`;
+    return "";
+  }
 
   const active = users.filter(u => u.status !== "pending");
   const pending = users.filter(u => u.status === "pending");
@@ -277,13 +323,15 @@ export default function AdminPage() {
       )}
 
       {confirmAction && (
-        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 10000 }}>
           <div className="modal-enter mx-4" style={{ width: 420, maxWidth: "100%", background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
-            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>{confirmAction.type === "delete" ? "Remove user?" : confirmAction.type === "suspend" ? "Suspend user?" : confirmAction.type === "revoke" ? "Revoke sessions?" : "Revoke ALL sessions?"}</h3>
-            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>{confirmAction.type === "delete" ? `Remove ${confirmAction.name}? They will lose access immediately.` : confirmAction.type === "suspend" ? `Suspend ${confirmAction.name}? They will be signed out immediately.` : confirmAction.type === "revoke" ? `Sign ${confirmAction.name} out of all devices?` : "Sign out ALL users from all devices?"}</p>
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>{confirmTitle()}</h3>
+            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>{confirmBody()}</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmAction(null)} className="btn-outline">Cancel</button>
-              <button onClick={executeConfirm} className={confirmAction.type === "delete" ? "btn-danger" : "btn-primary"}>{confirmAction.type === "delete" ? "Remove" : confirmAction.type === "suspend" ? "Suspend" : "Revoke"}</button>
+              <button onClick={executeConfirm} className={confirmAction.type === "delete" ? "btn-danger" : "btn-primary"}>
+                {confirmAction.type === "delete" ? "Delete" : confirmAction.type === "suspend" ? "Suspend" : confirmAction.type === "unsuspend" ? "Restore" : confirmAction.type === "reset_defaults" ? "Reset" : "Confirm"}
+              </button>
             </div>
           </div>
         </div>
