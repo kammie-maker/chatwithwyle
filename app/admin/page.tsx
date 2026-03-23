@@ -74,14 +74,14 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
   const hov = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "rgba(204,138,57,0.08)";
   const unhov = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "transparent";
   const modes = [["sales", "Sales"], ["client-success", "Client Success"], ["fulfillment", "Revenue Management"], ["onboarding", "Onboarding"]];
-  const views = [["client", "Client Mode"], ["research", "Strategy Mode"]];
+  const views = [["client", "Lead/Client Mode"], ["research", "Strategy Mode"]];
 
   return (
     <div>
       <button ref={btnRef} onClick={toggle} aria-label="User actions" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#999", padding: "8px 4px", lineHeight: 1 }}>&hellip;</button>
       {open && (
         <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 8px 24px rgba(0,0,0,0.1)", zIndex: 9999, minWidth: 230, padding: "6px 0" }}>
-          <button onClick={() => setExpandedItem(expandedItem === "mode" ? null : "mode")} style={itemStyle} onMouseEnter={hov} onMouseLeave={unhov}>Set default mode <span style={{ color: "#bbb", fontSize: 13 }}>&rsaquo;</span></button>
+          <button onClick={() => setExpandedItem(expandedItem === "mode" ? null : "mode")} style={itemStyle} onMouseEnter={hov} onMouseLeave={unhov}>Set default role <span style={{ color: "#bbb", fontSize: 13 }}>&rsaquo;</span></button>
           {expandedItem === "mode" && (
             <div className="flex flex-wrap gap-1" style={{ padding: "4px 16px 10px" }}>
               {modes.map(([k, l]) => <button key={k} onClick={() => { onUpdate({ defaultMode: k }); setExpandedItem(null); }} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: user.defaultMode === k ? "#CC8A39" : "#f0ede6", color: user.defaultMode === k ? "#161616" : "#555", fontWeight: user.defaultMode === k ? 600 : 400 }}>{l}</button>)}
@@ -301,11 +301,11 @@ export default function AdminPage() {
                 : "The welcome email could not be sent. Share the URL with them manually:"}
             </p>
             <div style={{ background: "var(--color-cream)", borderRadius: 10, padding: "14px 16px", fontSize: 14, lineHeight: 1.6, color: "var(--color-onyx)", border: "1px solid rgba(0,0,0,0.08)", marginBottom: 16, whiteSpace: "pre-wrap" }}>
-              {`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\n${addedUser.appUrl}\n\nYour default mode is set to ${addedUser.defaultMode}. Let me know if you have any questions.`}
+              {`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\n${addedUser.appUrl}\n\nYour default role is set to ${addedUser.defaultMode}. Let me know if you have any questions.`}
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => {
-                navigator.clipboard.writeText(`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\n${addedUser.appUrl}\n\nYour default mode is set to ${addedUser.defaultMode}. Let me know if you have any questions.`);
+                navigator.clipboard.writeText(`Hey ${addedUser.firstName}, you now have access to Wyle, Freewyld Foundry's internal AI tool. Sign in with your Freewyld Google account at:\n${addedUser.appUrl}\n\nYour default role is set to ${addedUser.defaultMode}. Let me know if you have any questions.`);
                 setCopiedMsg(true); setTimeout(() => setCopiedMsg(false), 2000);
               }} className="btn-outline" style={{ fontSize: 14 }}>{copiedMsg ? "Copied!" : addedUser.emailSent ? "Copy Slack Message" : "Copy Message"}</button>
               <button onClick={() => setAddedUser(null)} className="btn-primary" style={{ fontSize: 14 }}>Done</button>

@@ -24,16 +24,16 @@ export const BASE_STEPS: TourStep[] = [
   {
     id: "mode-selector",
     target: "mode-selector",
-    title: "Choose your mode",
-    content: "Select Sales, Client Success, Revenue Management, or Onboarding based on what you're working on. Each mode gives Wyle a different lens.",
+    title: "Choose your role",
+    content: "Select Sales, Client Success, Revenue Management, or Onboarding based on what you're working on. Each role gives Wyle a different lens.",
     placement: "top",
     beforeShow: { setActiveTab: "chat" },
   },
   {
     id: "interaction-toggle",
     target: "interaction-toggle",
-    title: "Client Mode vs Strategy Mode",
-    content: "Client Mode gives you word-for-word scripts to say to clients. Strategy Mode gives you internal coaching and context to prepare.",
+    title: "Lead/Client Mode vs Strategy Mode",
+    content: "Lead Mode (Sales) or Client Mode gives you word-for-word scripts to say to leads or clients. Strategy Mode gives you internal coaching and context to prepare.",
     placement: "bottom",
   },
   {
@@ -47,7 +47,7 @@ export const BASE_STEPS: TourStep[] = [
     id: "suggested-questions",
     target: "suggested-questions",
     title: "Or start with a common topic",
-    content: "These are the most common questions and objections for your mode. Click any to get an instant answer.",
+    content: "These are the most common questions and objections for your role. Click any to get an instant answer.",
     placement: "top",
   },
   {
@@ -93,7 +93,7 @@ export const BASE_STEPS: TourStep[] = [
     id: "profile-row",
     target: "profile-row",
     title: "Your profile and settings",
-    content: "Click your name to update your default mode, switch between Client and Strategy Mode defaults, and sign out.",
+    content: "Click your name to update your default role, switch between Lead/Client and Strategy Mode defaults, and sign out.",
     placement: "right",
   },
   {
@@ -122,6 +122,59 @@ export const KB_STEPS: TourStep[] = [
     placement: "center",
     isModal: true,
     requiredRole: "knowledge_manager",
+  },
+];
+
+// KB-specific onboarding tour — shown on first KB tab visit
+export const KB_ONBOARDING_STEPS: TourStep[] = [
+  {
+    id: "kb-welcome",
+    target: "",
+    title: "Welcome to the Knowledge Base",
+    content: "This is where you manage the files that power Wyle's responses. Let's walk through the key areas.",
+    placement: "center",
+    isModal: true,
+    beforeShow: { setActiveTab: "kb" },
+  },
+  {
+    id: "kb-source-files",
+    target: "kb-source-files",
+    title: "Source Files",
+    content: "All of Wyle's source documents are listed here. Click any file to view and edit it.",
+    placement: "right",
+    beforeShow: { setActiveTab: "kb" },
+  },
+  {
+    id: "kb-file-viewer",
+    target: "kb-file-viewer",
+    title: "File Viewer",
+    content: "When you select a file, its contents appear here. You can edit the text directly or use Chat to Edit for AI-assisted changes.",
+    placement: "left",
+    beforeShow: { setActiveTab: "kb" },
+  },
+  {
+    id: "kb-chat-to-edit",
+    target: "kb-chat-to-edit",
+    title: "Chat to Edit",
+    content: "Describe the change you want and Claude will suggest edits with a diff view. Review, then accept or reject.",
+    placement: "right",
+    beforeShow: { setActiveTab: "kb" },
+  },
+  {
+    id: "kb-update-button",
+    target: "kb-update-button",
+    title: "Update Wyle's Knowledge",
+    content: "After editing source files, click here to recompile Wyle's knowledge base. Changes take effect immediately after the rewrite completes.",
+    placement: "bottom",
+    beforeShow: { setActiveTab: "kb" },
+  },
+  {
+    id: "kb-tour-done",
+    target: "",
+    title: "You're all set.",
+    content: "Edit files, chat to make changes, and update Wyle's knowledge whenever you're ready.",
+    placement: "center",
+    isModal: true,
   },
 ];
 

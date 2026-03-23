@@ -193,7 +193,7 @@ function MockProfilePopover() {
   return (
     <svg viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", maxWidth: 240 }}>
       <rect width="240" height="180" rx="10" fill="white" stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
-      <text x="16" y="22" fontFamily="sans-serif" fontSize="8" fontWeight="600" fill="#999" letterSpacing="1">I USUALLY USE WYLE FOR</text>
+      <text x="16" y="22" fontFamily="sans-serif" fontSize="8" fontWeight="600" fill="#999" letterSpacing="1">MY DEFAULT ROLE</text>
       <rect x="16" y="30" width="42" height="18" rx="9" fill={C.mustard} />
       <text x="37" y="42" textAnchor="middle" fontFamily="sans-serif" fontSize="8" fontWeight="600" fill={C.onyx}>Sales</text>
       <rect x="64" y="30" width="78" height="18" rx="9" fill="rgba(22,22,22,0.06)" />
@@ -389,29 +389,30 @@ export default function GuideContent({ userRole }: { userRole: string }) {
               <P>Wyle is Freewyld Foundry&apos;s internal AI tool. Its purpose is to help you understand Freewyld&apos;s processes, protocols, promises, and positioning and communicate them clearly and confidently to clients.</P>
               <Sub label="Signing In">Sign in with your @freewyld.com Google account. No password needed.</Sub>
               <Mockup><MockSignIn /></Mockup>
-              <Sub label="Your first chat">Click + New Chat in the sidebar, select your mode, and start typing. Wyle responds immediately.</Sub>
+              <Sub label="Your first chat">Click + New Chat in the sidebar, select your role, and start typing. Wyle responds immediately.</Sub>
               <Mockup maxW={280}><MockSidebar /></Mockup>
             </Accordion>
 
-            <Accordion title="Chat Modes" defaultOpen>
-              <P>Select your mode based on your role and what you&apos;re working on. Each mode gives Wyle a different lens.</P>
+            <Accordion title="Chat Roles" defaultOpen>
+              <P>Select your role based on what you&apos;re working on. Each role gives Wyle a different lens.</P>
               <Mockup maxW={220}><MockModeSelector /></Mockup>
-              <Sub label="Sales Chat">For Mariano and Jaydon. Objection handling, FAQs, and drafting follow-ups for sales prospects.</Sub>
-              <Sub label="Client Success Chat">For Felipe. Responding to existing clients via Slack and email. Billing questions, disputes, hospitality issues, and client communication.</Sub>
-              <Sub label="Revenue Management Chat">For revenue managers. Presenting strategies and results, getting client buy-in, and handling pushback on recommendations.</Sub>
-              <Sub label="Onboarding Chat">For Felipe. Walking new clients through the onboarding process, setting expectations, and pre-empting common concerns.</Sub>
+              <Sub label="Sales">For Mariano and Jaydon. Objection handling, FAQs, and drafting follow-ups for sales prospects.</Sub>
+              <Sub label="Client Success">For Felipe. Responding to existing clients via Slack and email. Billing questions, disputes, hospitality issues, and client communication.</Sub>
+              <Sub label="Revenue Management">For revenue managers. Presenting strategies and results, getting client buy-in, and handling pushback on recommendations.</Sub>
+              <Sub label="Onboarding">For Felipe. Walking new clients through the onboarding process, setting expectations, and pre-empting common concerns.</Sub>
             </Accordion>
 
-            <Accordion title="Client Mode vs Strategy Mode" defaultOpen>
+            <Accordion title="Lead/Client Mode vs Strategy Mode" defaultOpen>
               <P>The toggle at the top of the chat switches between two response styles.</P>
               <Mockup maxW={320}><MockToggle /></Mockup>
-              <Sub label="Client Mode">Wyle responds with word-for-word scripts you can say directly to a client. Use this when you&apos;re on a call, in a Slack thread, or drafting a message.</Sub>
+              <Sub label="Lead Mode (Sales)">In the Sales role, this is called Lead Mode. Wyle responds with word-for-word scripts you can say directly to a lead. Use this when you&apos;re on a call, in a Slack thread, or drafting a message.</Sub>
+              <Sub label="Client Mode (other roles)">In Client Success, Revenue Management, and Onboarding, this is called Client Mode. Same format, tuned for existing clients.</Sub>
               <Sub label="Strategy Mode">Wyle responds with coaching, context, and internal analysis. Use this when you&apos;re preparing for a call or researching a topic.</Sub>
               <Sub label="Switching mid-conversation">Toggle at any time. Previous messages stay visible. New responses immediately follow the new mode&apos;s format. No disruption.</Sub>
             </Accordion>
 
             <Accordion title="How Wyle Responds" defaultOpen>
-              <P>Every response in Client Mode starts with a ready-to-use script followed by options to go deeper.</P>
+              <P>Every response in Lead/Client Mode starts with a ready-to-use script followed by options to go deeper.</P>
               <Mockup><MockResponseBubble /></Mockup>
               <Sub label="The initial response">The first response is a concise 1-3 sentence script. Say it directly or adapt it.</Sub>
               <Sub label="+ More Detail">2-5 additional sentences expanding on the initial response. Still client-facing.</Sub>
@@ -425,7 +426,7 @@ export default function GuideContent({ userRole }: { userRole: string }) {
               <Sub label="What Wyle is for">Use Wyle to understand and communicate Freewyld&apos;s processes, protocols, promises, pricing, guarantees, and positioning. Whether you&apos;re handling an objection, answering a client question, drafting a follow-up, or preparing for a call, Wyle knows Freewyld and helps you communicate it well.</Sub>
               <Sub label="What Wyle is not for (right now)">Wyle does not have context on specific clients, their revenue, or their portfolio performance. Do not use it for anything related to revenue reporting, commissions, or team payouts.</Sub>
               <Sub label="How to ask good questions">Be specific to Freewyld. Instead of &quot;how do I handle a pricing objection&quot; ask &quot;how do I handle a prospect who says our fee is too expensive.&quot;</Sub>
-              <Sub label="Switching chat modes">Use the mode selector in the bottom left. If you switch chat modes (e.g. Sales to Client Success), you&apos;ll be asked whether to start fresh or bring your conversation along.</Sub>
+              <Sub label="Switching roles">Use the role selector in the bottom left. If you switch roles (e.g. Sales to Client Success), you&apos;ll be asked whether to start fresh or bring your conversation along.</Sub>
               <Mockup maxW={380}><MockModeSwitchCard /></Mockup>
             </Accordion>
 
@@ -452,8 +453,8 @@ export default function GuideContent({ userRole }: { userRole: string }) {
             <Accordion title="Your Profile">
               <P>Click your name at the bottom of the sidebar to access your profile and settings.</P>
               <Mockup maxW={260}><MockProfileRow /></Mockup>
-              <Sub label="Default mode">Set which chat mode opens by default when you start a new chat.</Sub>
-              <Sub label="Default view">Set whether new chats open in Client Mode or Strategy Mode by default.</Sub>
+              <Sub label="Default role">Set which role opens by default when you start a new chat.</Sub>
+              <Sub label="Default view">Set whether new chats open in Lead/Client Mode or Strategy Mode by default.</Sub>
               <Mockup maxW={240}><MockProfilePopover /></Mockup>
             </Accordion>
           </>

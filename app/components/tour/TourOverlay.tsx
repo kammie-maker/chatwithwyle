@@ -165,14 +165,24 @@ function TourTooltip({ visible, step, stepNum, totalSteps, isLast, targetRect, o
 
 // ── Main overlay — both layers always mounted ──
 export default function TourOverlay() {
-  const { isTourActive, currentStep, steps, nextStep, prevStep, skipTour } = useTour();
+  const { isTourActive, currentStep, steps, nextStep, prevStep, skipTour,
+    isKbTourActive, kbTourStep, kbTourSteps, nextKbStep, prevKbStep, skipKbTour } = useTour();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const prevTargetRef = useRef<Element | null>(null);
 
-  const step = steps[currentStep];
+  // Use KB tour values when KB tour is active, otherwise main tour
+  const activeTour = isKbTourActive;
+  const activeStep = activeTour ? kbTourStep : currentStep;
+  const activeSteps = activeTour ? kbTourSteps : steps;
+  const activeNext = activeTour ? nextKbStep : nextStep;
+  const activePrev = activeTour ? prevKbStep : prevStep;
+  const activeSkip = activeTour ? skipKbTour : skipTour;
+  const isActive = isTourActive || isKbTourActive;
+
+  const step = activeSteps[activeStep];
   const isModal = step?.isModal;
   const isTooltip = step && !isModal;
-  const isLast = currentStep === steps.length - 1;
+  const isLast = activeStep === activeSteps.length - 1;
 
   // Measure target element for tooltip steps
   const measureTarget = useCallback(() => {
@@ -195,7 +205,7 @@ export default function TourOverlay() {
   }, [step, isModal]);
 
   useEffect(() => {
-    if (!isTourActive) {
+    if (!isActive) {
       if (prevTargetRef.current) { prevTargetRef.current.classList.remove("tour-spotlight-target"); prevTargetRef.current = null; }
       setTargetRect(null);
       return;
@@ -209,13 +219,13 @@ export default function TourOverlay() {
       window.removeEventListener("resize", measureTarget);
       window.removeEventListener("scroll", measureTarget, true);
     };
-  }, [isTourActive, currentStep, measureTarget]);
+  }, [isActive, activeStep, measureTarget]);
 
   useEffect(() => {
     return () => { if (prevTargetRef.current) prevTargetRef.current.classList.remove("tour-spotlight-target"); };
   }, []);
 
-  if (!isTourActive) return null;
+  if (!isActive) return null;
 
   // Spotlight cutout for tooltip steps
   const padding = 10;
@@ -235,7 +245,7 @@ export default function TourOverlay() {
         opacity: isTooltip ? 1 : 0,
         visibility: isTooltip ? "visible" : "hidden",
         pointerEvents: isTooltip ? "all" : "none",
-      }} onClick={skipTour} />
+      }} onClick={activeSkip} />
 
       {/* Spotlight cutout */}
       {targetRect && isTooltip && <div style={spotStyle} />}
@@ -244,24 +254,24 @@ export default function TourOverlay() {
       <TourTooltip
         visible={!!isTooltip}
         step={step || null}
-        stepNum={currentStep + 1}
-        totalSteps={steps.length}
+        stepNum={activeStep + 1}
+        totalSteps={activeSteps.length}
         isLast={isLast}
         targetRect={targetRect}
-        onNext={nextStep}
-        onPrev={prevStep}
-        onSkip={skipTour}
+        onNext={activeNext}
+        onPrev={activePrev}
+        onSkip={activeSkip}
       />
 
       {/* Modal — always mounted, shown via CSS */}
       <TourModal
         visible={!!isModal}
         step={step || null}
-        stepNum={currentStep + 1}
-        totalSteps={steps.length}
-        onNext={nextStep}
-        onPrev={prevStep}
-        onSkip={skipTour}
+        stepNum={activeStep + 1}
+        totalSteps={activeSteps.length}
+        onNext={activeNext}
+        onPrev={activePrev}
+        onSkip={activeSkip}
       />
     </>
   );

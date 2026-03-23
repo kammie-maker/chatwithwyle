@@ -91,12 +91,14 @@ function groupByDate(convs: Conversation[]): { label: string; items: Conversatio
   return groups;
 }
 
-const MODE_LABELS: Record<ChatMode, string> = {
+const ROLE_LABELS: Record<ChatMode, string> = {
   sales: "Sales",
   "client-success": "Client Success",
   fulfillment: "Revenue Management",
   onboarding: "Onboarding",
 };
+// Keep MODE_LABELS as alias for backwards compat in internal logic
+const MODE_LABELS = ROLE_LABELS;
 
 interface QuestionGroup { label: string; items: string[] }
 type GroupedQuestions = Record<ChatMode, QuestionGroup[]>;
@@ -228,10 +230,19 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
 
   // Clean content: strip "---" horizontal rules and meta-commentary
   function clean(s: string) {
-    let cleaned = s.replace(/^#{2,4}\s+(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "").replace(/^\*\*(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL)\*\*\s*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").replace(/^- /gm, "").trim();
+    let cleaned = s.replace(/^#{2,4}\s+(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL FULL PICTURE|INTERNAL|STRATEGY|ANSWER TO CLIENT|PROBLEM|OPTIONS|RECOMMENDATION)\s*$/gm, "").replace(/^\*\*(SIMPLE|MORE DETAIL|FULL SCRIPT|REP NOTES|DEEPER|DEEPEST|INTERNAL)\*\*\s*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").trim();
     // Strip meta-commentary
     cleaned = cleaned.replace(/^Here is the\s+(?:MORE DETAIL|FULL SCRIPT|REP NOTES|SIMPLE|DEEPER|DEEPEST|INTERNAL)[^.\n]*(?:section|response)[^.\n]*\.?\s*\n*/i, "").replace(/^Here is the\s+[^.\n]*\s+section\s+as\s+requested[^.\n]*\.?\s*\n*/i, "").replace(/^\n+/, "").trim();
     return cleaned;
+  }
+
+  // Render content: for Sales mode, convert lines to bullet points
+  function renderContent(s: string) {
+    if (chatMode !== "sales") return s;
+    // Split into paragraphs (separated by blank lines) and render non-empty ones as bullets
+    const lines = s.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return s;
+    return lines.map(line => `\u2022 ${line.replace(/^[-•]\s*/, "")}`).join("\n\n");
   }
 
   // Get SIMPLE content (first section or entire text)
@@ -285,7 +296,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                 </>
               )}
               {/* SIMPLE / base content */}
-              <div className="msg-content whitespace-pre-wrap">{simpleContent}</div>
+              <div className="msg-content whitespace-pre-wrap">{renderContent(simpleContent)}</div>
               {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1" aria-label="Wyle is thinking" aria-busy="true"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
             </>
           )}
@@ -301,7 +312,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   {SECTION_DISPLAY[k] || k}
                 </div>
                 {content ? (
-                  <div className="msg-content whitespace-pre-wrap" style={{ marginTop: 0 }}>{clean(content)}</div>
+                  <div className="msg-content whitespace-pre-wrap" style={{ marginTop: 0 }}>{renderContent(clean(content))}</div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-mustard)" }}>
                     <Spinner size={12} color="var(--color-mustard)" />
@@ -656,10 +667,10 @@ export default function Home() {
     }
   }, [messages, userScrolledUp]);
   useEffect(() => { activeConvRef.current = activeConvId; }, [activeConvId]);
-  useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
+  useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); checkAndStartKbTour(); } }, [activeTab]);
 
   // Tour action bridge
-  const { tourAction, clearTourAction, startTour: replayTour } = useTour();
+  const { tourAction, clearTourAction, startTour: replayTour, checkAndStartKbTour } = useTour();
   useEffect(() => {
     if (!tourAction) return;
     if (tourAction.setActiveTab) setActiveTab(tourAction.setActiveTab as Tab);
@@ -704,7 +715,7 @@ export default function Home() {
     if (messages.length === 0) {
       // No conversation yet — just switch directly
       setChatMode(mode);
-      setToast(`Switched to ${MODE_LABELS[mode]}`);
+      setToast(`Switched to ${ROLE_LABELS[mode]}`);
     } else {
       // Show inline prompt
       setModeSwitchPrompt(mode);
@@ -829,7 +840,8 @@ The --- divider must appear on its own line with nothing before or after it on t
 
     // Only insert divider if there are messages in the conversation
     if (messages.length > 0) {
-      const label = newMode === "client" ? "Client Mode" : "Strategy Mode";
+      const clientLabel = chatMode === "sales" ? "Lead Mode" : "Client Mode";
+      const label = newMode === "client" ? clientLabel : "Strategy Mode";
       const dividerMsg: Message = { role: "assistant", content: `\u2014 ${label} \u2014`, isDivider: true, mode: chatMode };
 
       // When switching from Strategy → Client, find last Strategy assistant message and add draft buttons
@@ -1355,7 +1367,7 @@ ${context}`;
                 <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
                   {/* Preferences */}
                   <div style={{ padding: "12px 16px" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>I usually use Wyle for</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default role</div>
                     <div className="flex flex-wrap gap-1 mb-3">
                       {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
                         <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
@@ -1369,7 +1381,7 @@ ${context}`;
                       {(["client", "research"] as InteractionMode[]).map(v => (
                         <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
                           style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
-                          {v === "client" ? "Client Mode" : "Strategy Mode"}
+                          {v === "client" ? (chatMode === "sales" ? "Lead Mode" : "Client Mode") : "Strategy Mode"}
                         </button>
                       ))}
                     </div>
@@ -1486,7 +1498,7 @@ ${context}`;
                 style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
                   background: interactionMode === "client" ? "#3c3b22" : "transparent",
                   color: interactionMode === "client" ? "#f8f6ee" : "rgba(22,22,22,0.4)" }}>
-                Client Mode
+                {chatMode === "sales" ? "Lead Mode" : "Client Mode"}
               </button>
               <button onClick={() => switchInteractionMode("research")}
                 style={{ fontSize: 13, fontWeight: 600, padding: "4px 14px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "var(--font-body)",
@@ -1589,7 +1601,7 @@ ${context}`;
                 </div>
               );
             })}
-            {/* Mode switch inline prompt */}
+            {/* Role switch inline prompt */}
             {modeSwitchPrompt && (
               <div style={{ background: "#ffffff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: "16px 18px", maxWidth: 480, margin: "16px auto", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
                 <p style={{ fontSize: 15, lineHeight: 1.4, color: "var(--color-onyx)", margin: "0 0 10px 0" }}>
@@ -1685,7 +1697,7 @@ ${context}`;
         {activeTab === "kb" && isKbUser && (
           <div className="flex-1 flex overflow-hidden">
             {/* KB Sidebar: Source Files */}
-            <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>
+            <div data-tour="kb-source-files" className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>
               <div className="shrink-0 flex items-center justify-between px-3 py-3">
                 {sidebarOpen && <h2 className="text-sm font-semibold" style={{ color: "var(--color-cream)", fontFamily: "var(--font-heading)" }}>Source Files</h2>}
                 <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex items-center justify-center" style={{ width: 24, height: 24, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-cream)", marginLeft: sidebarOpen ? 0 : "auto", marginRight: sidebarOpen ? 0 : "auto" }}>
@@ -1734,7 +1746,7 @@ ${context}`;
                     ))
                   )}
                 </div>
-                <button onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
+                <button data-tour="kb-update-button" onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
                   className="shrink-0 disabled:opacity-50"
                   style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
                   {rewriting ? <span className="flex items-center gap-2"><Spinner size={14} color="#161616" /> Updating...</span> : "Update Wyle's Knowledge"}
@@ -1750,7 +1762,7 @@ ${context}`;
               ) : (
                 <>
                   {/* Left column: Chat to edit (40%) */}
-                  <div className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
+                  <div data-tour="kb-chat-to-edit" className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
                     <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
                       <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
                     </div>
@@ -1783,7 +1795,7 @@ ${context}`;
                   </div>
 
                   {/* Right column: File content (60%) */}
-                  <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+                  <div data-tour="kb-file-viewer" className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
                     <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)" }}>
                       <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
                     </div>
