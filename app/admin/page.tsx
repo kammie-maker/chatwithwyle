@@ -25,7 +25,7 @@ function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v:
   return <span onClick={() => setEditing(true)} style={{ cursor: "pointer", borderBottom: "1px dashed rgba(22,22,22,0.2)" }}>{value || <span style={{ color: "rgba(22,22,22,0.3)" }}>{placeholder}</span>}</span>;
 }
 
-function ActionsMenu({ user, onAction }: { user: User; onAction: (type: string) => void }) {
+function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type: string) => void; onUpdate: (updates: Record<string, string>) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,22 +33,40 @@ function ActionsMenu({ user, onAction }: { user: User; onAction: (type: string) 
     if (open) document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
+  const menuBtn = "w-full text-left px-4 py-2.5 text-xs transition-all";
+  const menuStyle = { background: "transparent" as string, border: "none" as string, cursor: "pointer" as string, color: "var(--color-onyx)" };
+  const hover = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "rgba(0,0,0,0.03)";
+  const unhover = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.style.background = "transparent";
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(!open)} aria-label="User actions" style={{ background: "none", border: "1px solid rgba(22,22,22,0.12)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 16, color: "rgba(22,22,22,0.5)", lineHeight: 1 }}>&hellip;</button>
       {open && (
-        <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "var(--bg-card)", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 20, minWidth: 160, overflow: "hidden" }}>
-          <button onClick={() => { setOpen(false); onAction("revoke"); }} className="w-full text-left px-4 py-2.5 text-xs transition-all" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-onyx)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Revoke Sessions</button>
+        <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "var(--bg-card)", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 20, minWidth: 200, overflow: "hidden" }}>
+          {/* Default Mode */}
+          <div className="px-4 py-2 text-[10px] font-semibold uppercase" style={{ color: "rgba(22,22,22,0.35)", letterSpacing: "1px" }}>Default Mode</div>
+          <div className="px-4 pb-2">
+            <select value={user.defaultMode || "sales"} onChange={e => { onUpdate({ defaultMode: e.target.value }); }} onClick={e => e.stopPropagation()}
+              style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
+              <option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option>
+            </select>
+          </div>
+          {/* Default Interaction */}
+          <div className="px-4 py-2 text-[10px] font-semibold uppercase" style={{ color: "rgba(22,22,22,0.35)", letterSpacing: "1px", borderTop: "1px solid rgba(22,22,22,0.06)" }}>Default Interaction</div>
+          <div className="px-4 pb-2">
+            <select value={user.defaultInteraction || "client"} onChange={e => { onUpdate({ defaultInteraction: e.target.value }); }} onClick={e => e.stopPropagation()}
+              style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "var(--bg-card)", width: "100%", cursor: "pointer" }}>
+              <option value="client">Client Interaction</option><option value="research">Internal Research</option>
+            </select>
+          </div>
+          <div style={{ borderTop: "1px solid rgba(22,22,22,0.06)" }} />
+          <button onClick={() => { setOpen(false); onAction("revoke"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Revoke Sessions</button>
           {user.status === "active" ? (
-            <button onClick={() => { setOpen(false); onAction("suspend"); }} className="w-full text-left px-4 py-2.5 text-xs transition-all" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-onyx)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Suspend</button>
+            <button onClick={() => { setOpen(false); onAction("suspend"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Suspend</button>
           ) : (
-            <button onClick={() => { setOpen(false); onAction("unsuspend"); }} className="w-full text-left px-4 py-2.5 text-xs transition-all" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-onyx)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Unsuspend</button>
+            <button onClick={() => { setOpen(false); onAction("unsuspend"); }} className={menuBtn} style={menuStyle} onMouseEnter={hover} onMouseLeave={unhover}>Unsuspend</button>
           )}
-          <button onClick={() => { setOpen(false); onAction("delete"); }} className="w-full text-left px-4 py-2.5 text-xs transition-all" style={{ background: "transparent", border: "none", cursor: "pointer", color: "#b91c1c", borderTop: "1px solid rgba(22,22,22,0.06)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(180,30,30,0.04)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>Delete</button>
+          <button onClick={() => { setOpen(false); onAction("delete"); }} className={menuBtn} style={{ ...menuStyle, color: "#b91c1c", borderTop: "1px solid rgba(22,22,22,0.06)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(180,30,30,0.04)"} onMouseLeave={unhover}>Delete</button>
         </div>
       )}
     </div>
@@ -154,35 +172,26 @@ export default function AdminPage() {
         {/* Desktop table */}
         <div className="hidden md:block" style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)", overflow: "hidden" }}>
           {/* Header */}
-          <div className="flex items-center px-4 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)", gap: 8 }}>
-            <div style={{ flex: 2, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Name</div>
-            <div style={{ flex: 3, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Email</div>
-            <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Role</div>
-            <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Status</div>
-            <div style={{ flex: 2, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Defaults</div>
-            <div style={{ flex: 1.5, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>Login</div>
-            <div style={{ width: 40 }} />
+          <div className="flex items-center px-4 py-3" style={{ borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(22,22,22,0.02)" }}>
+            {[["First Name", "12%"], ["Last Name", "12%"], ["Email", "30%"], ["Role", "12%"], ["Status", "12%"], ["Last Login", "14%"]].map(([h, w]) => (
+              <div key={h} style={{ width: w, fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}>{h}</div>
+            ))}
+            <div style={{ width: "8%", textAlign: "right", fontSize: 11, fontWeight: 600, color: "rgba(22,22,22,0.45)", textTransform: "uppercase", letterSpacing: "1px" }}></div>
           </div>
           {loading ? <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
           : active.length === 0 ? <div className="text-center py-12 text-sm" style={{ color: "rgba(22,22,22,0.4)" }}>No active users.</div>
           : active.map(u => {
             const st = STATUS_STYLES[u.status] || STATUS_STYLES.active;
             return (
-              <div key={u.email} className="flex items-center px-4 transition-all" style={{ minHeight: 52, borderBottom: "1px solid rgba(22,22,22,0.04)", gap: 8 }}
+              <div key={u.email} className="flex items-center px-4 transition-all" style={{ minHeight: 52, borderBottom: "1px solid rgba(22,22,22,0.04)" }}
                 onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ flex: 2, fontSize: 13, fontWeight: 500, display: "flex", gap: 4 }}>
-                  <InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} />
-                  <InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} />
-                </div>
-                <div style={{ flex: 3, fontSize: 12, color: "rgba(22,22,22,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
-                <div style={{ flex: 1 }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Std</option><option value="admin">Admin</option></select></div>
-                <div style={{ flex: 1 }}><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
-                <div style={{ flex: 2, display: "flex", gap: 4 }}>
-                  <select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={{ ...sel, flex: 1, minWidth: 0 }}><option value="sales">Sales</option><option value="client-success">CS</option><option value="fulfillment">Rev</option><option value="onboarding">Onb</option></select>
-                  <select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} style={{ ...sel, flex: 1, minWidth: 0 }}><option value="client">Client</option><option value="research">Research</option></select>
-                </div>
-                <div style={{ flex: 1.5, fontSize: 11, color: "rgba(22,22,22,0.45)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
-                <div style={{ width: 40, textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} /></div>
+                <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.firstName || ""} placeholder="First" onSave={v => updateUser(u.email, { firstName: v })} /></div>
+                <div style={{ width: "12%", fontSize: 13, fontWeight: 500 }}><InlineEdit value={u.lastName || ""} placeholder="Last" onSave={v => updateUser(u.email, { lastName: v })} /></div>
+                <div title={u.email} style={{ width: "30%", fontSize: 12, color: "rgba(22,22,22,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{u.email}</div>
+                <div style={{ width: "12%" }}><select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
+                <div style={{ width: "12%" }}><span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span></div>
+                <div style={{ width: "14%", fontSize: 11, color: "rgba(22,22,22,0.45)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatLogin(u.lastLogin)}</div>
+                <div style={{ width: "8%", textAlign: "right" }}><ActionsMenu user={u} onAction={type => handleAction(u, type)} onUpdate={updates => updateUser(u.email, updates)} /></div>
               </div>
             );
           })}
@@ -200,13 +209,15 @@ export default function AdminPage() {
                   <span className="font-semibold text-sm">{u.firstName || ""} {u.lastName || ""}</span>
                   <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, fontWeight: 600, background: st.bg, color: st.color }}>{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</span>
                 </div>
-                <div className="text-xs mb-3" style={{ color: "rgba(22,22,22,0.5)" }}>{u.email}</div>
+                <div className="text-xs mb-2" style={{ color: "rgba(22,22,22,0.5)" }}>{u.email}</div>
                 <div className="flex gap-2 mb-2">
                   <select value={u.role} onChange={e => updateUser(u.email, { role: e.target.value })} style={{ ...sel, flex: 1 }}><option value="standard">Standard</option><option value="admin">Admin</option></select>
-                  <select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={{ ...sel, flex: 1 }}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select>
                 </div>
-                <select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} className="w-full mb-2" style={sel}><option value="client">Client Interaction</option><option value="research">Internal Research</option></select>
-                <div className="text-xs mb-3" style={{ color: "rgba(22,22,22,0.4)" }}>Last login: {formatLogin(u.lastLogin)}</div>
+                <div className="text-xs mb-2" style={{ color: "rgba(22,22,22,0.4)" }}>Last login: {formatLogin(u.lastLogin)}</div>
+                <div className="flex gap-2 mb-2">
+                  <select value={u.defaultMode || "sales"} onChange={e => updateUser(u.email, { defaultMode: e.target.value })} style={{ ...sel, flex: 1 }}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select>
+                  <select value={u.defaultInteraction || "client"} onChange={e => updateUser(u.email, { defaultInteraction: e.target.value })} style={{ ...sel, flex: 1 }}><option value="client">Client</option><option value="research">Research</option></select>
+                </div>
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={() => handleAction(u, "revoke")} className="text-xs px-3 py-1.5" style={{ borderRadius: 6, border: "1px solid rgba(22,22,22,0.12)", background: "transparent", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}>Revoke Sessions</button>
                   {u.status === "active" ? <button onClick={() => handleAction(u, "suspend")} className="text-xs px-3 py-1.5" style={{ borderRadius: 6, border: "1px solid #663925", background: "transparent", color: "#663925", cursor: "pointer" }}>Suspend</button>
