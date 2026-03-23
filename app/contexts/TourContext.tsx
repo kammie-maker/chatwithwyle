@@ -11,6 +11,7 @@ interface TourAction {
 
 interface TourContextValue {
   isTourActive: boolean;
+  isTransitioning: boolean;
   currentStep: number;
   steps: TourStep[];
   startTour: () => void;
@@ -23,6 +24,7 @@ interface TourContextValue {
 
 const TourContext = createContext<TourContextValue>({
   isTourActive: false,
+  isTransitioning: false,
   currentStep: 0,
   steps: [],
   startTour: () => {},
@@ -39,6 +41,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const userRole = (session?.user as Record<string, unknown>)?.role as string || "user";
   const [isTourActive, setIsTourActive] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [tourAction, setTourAction] = useState<TourAction | null>(null);
   const [checked, setChecked] = useState(false);
@@ -58,8 +61,22 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const completeTour = useCallback(() => {
     setIsTourActive(false);
+    setIsTransitioning(false);
     setCurrentStep(0);
     fetch("/api/user/tour", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tourCompleted: true }) }).catch(() => {});
+  }, []);
+
+  // Transition helper: hide tooltip, wait for DOM to settle, then show new step
+  const transitionToStep = useCallback((idx: number, delay = 100) => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setCurrentStep(idx);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsTransitioning(false);
+        });
+      });
+    }, delay);
   }, []);
 
   const nextStep = useCallback(() => {
@@ -67,22 +84,18 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     if (next >= steps.length) { completeTour(); return; }
     const step = steps[next];
     if (step.beforeShow) setTourAction(step.beforeShow);
-    // Small delay for tab switches to render
-    if (step.beforeShow?.setActiveTab) {
-      setTimeout(() => setCurrentStep(next), 300);
-    } else {
-      setCurrentStep(next);
-    }
-  }, [currentStep, steps, completeTour]);
+    const delay = step.beforeShow?.setActiveTab ? 300 : 100;
+    transitionToStep(next, delay);
+  }, [currentStep, steps, completeTour, transitionToStep]);
 
   const prevStep = useCallback(() => {
     if (currentStep > 0) {
       const prev = currentStep - 1;
       const step = steps[prev];
       if (step.beforeShow) setTourAction(step.beforeShow);
-      setCurrentStep(prev);
+      transitionToStep(prev, 100);
     }
-  }, [currentStep, steps]);
+  }, [currentStep, steps, transitionToStep]);
 
   const skipTour = useCallback(() => { completeTour(); }, [completeTour]);
 
@@ -120,7 +133,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   }, [startTour]);
 
   return (
-    <TourContext.Provider value={{ isTourActive, currentStep, steps, startTour, nextStep, prevStep, skipTour, tourAction, clearTourAction }}>
+    <TourContext.Provider value={{ isTourActive, isTransitioning, currentStep, steps, startTour, nextStep, prevStep, skipTour, tourAction, clearTourAction }}>
       {children}
     </TourContext.Provider>
   );

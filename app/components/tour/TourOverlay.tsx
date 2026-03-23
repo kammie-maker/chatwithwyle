@@ -16,7 +16,7 @@ function WyleAvatar({ size = 64 }: { size?: number }) {
 }
 
 export default function TourOverlay() {
-  const { isTourActive, currentStep, steps, nextStep, prevStep, skipTour } = useTour();
+  const { isTourActive, isTransitioning, currentStep, steps, nextStep, prevStep, skipTour } = useTour();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const prevTargetRef = useRef<Element | null>(null);
@@ -67,6 +67,11 @@ export default function TourOverlay() {
   }, []);
 
   if (!isTourActive || !step) return null;
+
+  // During step transitions, show only the backdrop to prevent flash at old position
+  if (isTransitioning) {
+    return <div className="tour-backdrop" style={{ background: "rgba(0,0,0,0.5)" }} />;
+  }
 
   const isExpandStep = step.id === "expand-info";
   const isDraftStep = step.id === "draft-info";
