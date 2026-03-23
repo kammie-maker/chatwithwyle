@@ -1349,7 +1349,7 @@ ${context}`;
               )}
             </div>
             {/* Profile row + popover */}
-            <div ref={profileMenuRef} className="shrink-0 relative" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div ref={profileMenuRef} className="shrink-0 relative" style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
               {/* Profile popover — opens upward */}
               {profileMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
