@@ -19,7 +19,7 @@ export function isKbEditor(role: string): boolean {
 async function checkUserStatus(email: string): Promise<{ allowed: boolean; role: string }> {
   const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
   const password = process.env.WYLE_PASSWORD;
-  if (!webhookUrl || !password) return { allowed: true, role: isAdmin(email) ? "admin" : "standard" };
+  if (!webhookUrl || !password) return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
 
   try {
     const listRes = await fetch(webhookUrl, {
@@ -30,7 +30,7 @@ async function checkUserStatus(email: string): Promise<{ allowed: boolean; role:
     });
     const listData = await listRes.json();
     const file = (listData.files || []).find((f: { name: string }) => f.name === "Wyle-Users.json");
-    if (!file) return { allowed: true, role: isAdmin(email) ? "admin" : "standard" };
+    if (!file) return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
 
     const fileRes = await fetch(webhookUrl, {
       method: "POST",
@@ -53,12 +53,13 @@ async function checkUserStatus(email: string): Promise<{ allowed: boolean; role:
         body: JSON.stringify({ action: "update_file", fileId: file.id, content: JSON.stringify(users, null, 2), password }),
         redirect: "follow",
       });
-      return { allowed: true, role: user.role || (isAdmin(email) ? "admin" : "standard") };
+      const resolvedRole = user.role === "standard" ? "user" : (user.role || (isAdmin(email) ? "admin" : "user"));
+      return { allowed: true, role: resolvedRole };
     }
 
-    return { allowed: true, role: isAdmin(email) ? "admin" : "standard" };
+    return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
   } catch {
-    return { allowed: true, role: isAdmin(email) ? "admin" : "standard" };
+    return { allowed: true, role: isAdmin(email) ? "admin" : "user" };
   }
 }
 

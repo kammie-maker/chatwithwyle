@@ -76,7 +76,7 @@ interface UserRecord {
   name: string;
   firstName?: string;
   lastName?: string;
-  role: "admin" | "knowledge_manager" | "standard";
+  role: "admin" | "knowledge_manager" | "user";
   status: "active" | "suspended" | "pending";
   lastLogin: string | null;
   createdAt: string;
@@ -121,13 +121,17 @@ export async function GET() {
   const users = await fetchUsersFromDrive();
   const seeded = await ensureAdminsSeed(users);
 
-  // Migrate: backfill firstName/lastName from name if missing
+  // Migrate: backfill firstName/lastName from name if missing, rename "standard" role to "user"
   let migrated = false;
   for (const key in users) {
     if (!users[key].firstName && users[key].name) {
       const parts = users[key].name.split(" ");
       users[key].firstName = parts[0] || "";
       users[key].lastName = parts.slice(1).join(" ") || "";
+      migrated = true;
+    }
+    if ((users[key].role as string) === "standard") {
+      users[key].role = "user";
       migrated = true;
     }
   }
@@ -144,7 +148,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const { email, role = "standard", name = "", firstName = "", lastName = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
+  const { email, role = "user", name = "", firstName = "", lastName = "", defaultMode = "sales", defaultInteraction = "client" } = await req.json();
   if (!email?.endsWith("@freewyld.com")) {
     return Response.json({ error: "Only @freewyld.com emails allowed" }, { status: 400 });
   }
@@ -162,7 +166,7 @@ export async function POST(req: Request) {
     name: [fn, ln].join(" ").trim(),
     firstName: fn,
     lastName: ln,
-    role: role as "admin" | "knowledge_manager" | "standard",
+    role: role as "admin" | "knowledge_manager" | "user",
     status: "pending",
     lastLogin: null,
     createdAt: new Date().toISOString(),

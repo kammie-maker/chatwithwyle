@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 interface User {
   email: string; name: string; firstName?: string; lastName?: string;
-  role: "admin" | "knowledge_manager" | "standard"; status: "active" | "suspended" | "pending";
+  role: "admin" | "knowledge_manager" | "user"; status: "active" | "suspended" | "pending";
   lastLogin: string | null; createdAt: string;
   suspendedAt?: string | null; sessionRevokedAt?: string | null;
   defaultMode?: string; defaultInteraction?: string;
@@ -27,7 +27,7 @@ function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v:
 const ROLE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
   admin: { bg: "#3c3b22", color: "#f8f6ee", label: "Admin" },
   knowledge_manager: { bg: "#CC8A39", color: "#161616", label: "Knowledge Manager" },
-  standard: { bg: "#f0ede6", color: "#555", label: "Standard" },
+  user: { bg: "#f0ede6", color: "#555", label: "User" },
 };
 
 function RoleSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -36,7 +36,7 @@ function RoleSelector({ value, onChange }: { value: string; onChange: (v: string
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) return; function c(e: MouseEvent) { if (menuRef.current && !menuRef.current.contains(e.target as Node) && btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false); } document.addEventListener("mousedown", c); return () => document.removeEventListener("mousedown", c); }, [open]);
-  const st = ROLE_STYLES[value] || ROLE_STYLES.standard;
+  const st = ROLE_STYLES[value] || ROLE_STYLES.user;
   return (
     <div style={{ position: "relative" }}>
       <button ref={btnRef} onClick={() => { if (btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ top: r.bottom + 4, left: r.left }); } setOpen(!open); }}
@@ -120,7 +120,7 @@ export default function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
-  const [inviteRole, setInviteRole] = useState<string>("standard");
+  const [inviteRole, setInviteRole] = useState<string>("user");
   const [inviteMode, setInviteMode] = useState("sales");
   const [inviteInteraction, setInviteInteraction] = useState("client");
   const [inviting, setInviting] = useState(false);
