@@ -92,6 +92,19 @@ select:focus-visible,
   border-radius: 6px;
 }
 
+/* ── Modal animation ── */
+@keyframes modalIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-enter { animation: modalIn 0.15s ease; }
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.backdrop-enter { animation: backdropIn 0.15s ease; }
+
 /* ── Toast animation ── */
 @keyframes slideInToast {
   from { transform: translateY(20px); opacity: 0; }

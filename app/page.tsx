@@ -1,13 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
+
+function Spinner({ size = 14, color = "currentColor" }: { size?: number; color?: string }) {
+  return <svg className="animate-spin" style={{ width: size, height: size }} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3" opacity="0.25" />
+    <path d="M12 2a10 10 0 019.95 9" stroke={color} strokeWidth="3" strokeLinecap="round" />
+  </svg>;
+}
 
 type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
-interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode; draftLabel?: string; mode?: ChatMode; isDivider?: boolean }
+interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode; draftLabel?: string; mode?: ChatMode; isDivider?: boolean; isError?: boolean }
 interface PendingFile { name: string; base64: string; mediaType: string; preview: string | null; fileType: "image" | "pdf" | "text" }
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
@@ -166,8 +173,8 @@ const MODE_ACTIONS: Record<ChatMode, string[]> = {
   onboarding: ["Draft Slack Message", "Draft Email"],
 };
 
-function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
-  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode; draftLabel?: string;
+function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionMode, draftLabel, isError, onRetry, inlineExpanded, expandLoading, expandingAll, onExpand, onExpandAll, onDraft, handleClarifyOption, clarifyInput, setClarifyInput }: {
+  text: string; msgIdx: number; isStreaming: boolean; chatMode: ChatMode; msgInteractionMode: InteractionMode; draftLabel?: string; isError?: boolean; onRetry?: () => void;
   inlineExpanded: Record<string, string>; expandLoading: string | undefined; expandingAll: boolean;
   onExpand: (section: string) => void; onExpandAll: () => void; onDraft: (action: string) => void;
   handleClarifyOption: (opt: string) => void;
@@ -207,10 +214,21 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           </div>
         )}
         <div className="px-4 py-3" style={isResearch || isDraft ? { paddingTop: 8 } : undefined}>
-          {/* SIMPLE / base content */}
-          <div className="text-sm leading-relaxed whitespace-pre-wrap">{simpleContent}</div>
-          {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
+          {/* Error state */}
+          {isError ? (
+            <div role="alert" className="flex items-center gap-3">
+              <span className="text-sm" style={{ color: "#b91c1c" }}>{simpleContent}</span>
+              {onRetry && <button onClick={onRetry} className="text-xs font-semibold px-3 py-1.5" style={{ borderRadius: 6, background: "transparent", border: "1px solid #b91c1c", color: "#b91c1c", cursor: "pointer" }}>Retry</button>}
+            </div>
+          ) : (
+            <>
+              {/* SIMPLE / base content */}
+              <div className="msg-content whitespace-pre-wrap">{simpleContent}</div>
+              {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1" aria-label="Wyle is thinking" aria-busy="true"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
+            </>
+          )}
 
+          {!isError && <>
           {/* Inline expanded sections */}
           {allExpandKeys.map(k => {
             const content = inlineExpanded[k];
@@ -324,6 +342,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               </div>
             </div>
           )}
+          </>}
         </div>
       </div>
     </div>
@@ -569,6 +588,22 @@ export default function Home() {
   }, [modeDropdownOpen]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
+  // Global Escape key handler
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (modeDropdownOpen) setModeDropdownOpen(false);
+      else if (modeSwitchPrompt) setModeSwitchPrompt(null);
+      else if (confirmDeleteConv) setConfirmDeleteConv(null);
+      else if (confirmClearAll) setConfirmClearAll(false);
+      else if (forceRewriteConfirm) setForceRewriteConfirm(false);
+      else if (confirmRewrite) setConfirmRewrite(false);
+      else if (mobileMenuOpen) setMobileMenuOpen(false);
+    }
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  });
+
   function switchMode(mode: ChatMode) {
     if (mode === chatMode) { setModeDropdownOpen(false); return; }
     setModeDropdownOpen(false);
@@ -722,7 +757,7 @@ export default function Home() {
       if (thisConvId) saveMessage("assistant", fullText, thisConvId);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode, mode: chatMode }]);
+        setMessages([...updated, { role: "assistant", content: "Something went wrong. Please try again.", interactionMode, mode: chatMode, isError: true }]);
       }
     } finally {
       streamingConvRef.current = null;
@@ -996,14 +1031,6 @@ ${context}`;
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {activeTab === "chat" && messages.length > 0 && (
-            <button onClick={clearConversation} className="text-xs font-medium px-3 py-1.5 transition-all"
-              style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(237,233,225,0.5)", fontFamily: "var(--font-body)", cursor: "pointer" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.color = "var(--color-mustard)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "rgba(237,233,225,0.5)"; }}>
-              Clear
-            </button>
-          )}
           {isAdminUser && (
             <a href="/admin" className="text-xs font-medium px-3 py-1.5 transition-all"
               style={{ borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(237,233,225,0.5)", textDecoration: "none", fontFamily: "var(--font-body)" }}>
@@ -1238,6 +1265,7 @@ ${context}`;
                   {msg.role === "assistant" ? (
                     <AssistantMessage text={userText} msgIdx={i} isStreaming={streaming && i === messages.length - 1} chatMode={chatMode}
                       msgInteractionMode={msg.interactionMode || "client"} draftLabel={msg.draftLabel}
+                      isError={msg.isError} onRetry={msg.isError ? () => { setMessages(prev => prev.filter((_, idx) => idx !== i)); if (i > 0) { const prevMsg = messages[i-1]; if (prevMsg?.role === "user") { const txt = typeof prevMsg.content === "string" ? prevMsg.content : ""; sendMessage(txt); } } } : undefined}
                       inlineExpanded={inlineExpanded[i] || {}} expandLoading={expandLoading[i]} expandingAll={!!expandingAll[i]}
                       onExpand={(section) => expandSectionInline(i, section)} onExpandAll={() => expandAllInline(i)}
                       onDraft={(action) => sendDraftAction(action, i)}
@@ -1350,8 +1378,8 @@ ${context}`;
 
       {/* Delete conversation confirm */}
       {confirmDeleteConv && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
-          <div style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+          <div className="modal-enter" style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>Delete conversation?</h3>
             <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This cannot be undone.</p>
             <div className="flex gap-2 justify-end">
@@ -1364,8 +1392,8 @@ ${context}`;
 
       {/* Clear all confirm */}
       {confirmClearAll && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
-          <div style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+          <div className="modal-enter" style={{ width: 400, background: "var(--bg-card)", borderRadius: 16, padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>Delete all conversations?</h3>
             <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This cannot be undone.</p>
             <div className="flex gap-2 justify-end">
@@ -1432,7 +1460,7 @@ ${context}`;
               <button onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
                 className="shrink-0 disabled:opacity-50"
                 style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                {rewriting ? "Updating knowledge..." : "Update Wyle's Knowledge"}
+                {rewriting ? <span className="flex items-center gap-2"><Spinner size={14} color="#161616" /> Updating...</span> : "Update Wyle's Knowledge"}
               </button>
             </div>
 
@@ -1533,7 +1561,7 @@ ${context}`;
 
       {/* Modals */}
       {confirmRewrite && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div style={{ width: 400, background: "var(--bg-card)", borderRadius: "16px", padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Trigger rewrite now?</h3>
             <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>Apply your changes to the compiled knowledge base now?</p>
@@ -1545,7 +1573,7 @@ ${context}`;
         </div>
       )}
       {kbAddConfirmRewrite && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div style={{ width: 400, background: "var(--bg-card)", borderRadius: "16px", padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Trigger rewrite now to apply changes?</h3>
             <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>Your update has been added. Rewrite the compiled knowledge base now to include it?</p>
@@ -1557,7 +1585,7 @@ ${context}`;
         </div>
       )}
       {forceRewriteConfirm && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
+        <div className="fixed inset-0 flex items-center justify-center backdrop-enter" style={{ background: "rgba(22,22,22,0.5)", zIndex: 50 }}>
           <div style={{ width: 400, background: "var(--bg-card)", borderRadius: "16px", padding: "1.5rem", boxShadow: "0 8px 32px rgba(22,22,22,0.25)" }}>
             <h3 className="text-base font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--color-onyx)" }}>Update Wyle's Knowledge?</h3>
             <p className="text-sm mb-4" style={{ color: "rgba(22,22,22,0.55)" }}>This will rewrite and recompile Wyle's entire knowledge base. This takes 30-60 seconds. Wyle will have updated knowledge immediately after.</p>
