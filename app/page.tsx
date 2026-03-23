@@ -390,6 +390,7 @@ export default function Home() {
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ChatMode | null>(null);
   const [confirmDeleteConv, setConfirmDeleteConv] = useState<string | null>(null);
+  const [convLoading, setConvLoading] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [chatMode, setChatMode] = useState<ChatMode>("sales");
@@ -469,10 +470,12 @@ export default function Home() {
   }
 
   async function loadConversation(id: string) {
+    setConvLoading(true);
+    setMobileMenuOpen(false);
     // If navigating away from a streaming conversation, mark it as background
     if (streamingConvRef.current && streamingConvRef.current !== id) {
       setBgStreaming(prev => new Set(prev).add(streamingConvRef.current!));
-      setStreaming(false); // clear UI streaming state so new conversation isn't blocked
+      setStreaming(false);
     }
     try {
       const res = await fetch(`/api/conversations/${id}`);
@@ -493,6 +496,7 @@ export default function Home() {
         setExpandLoading({});
       }
     } catch { /* ignore */ }
+    finally { setConvLoading(false); }
   }
 
   async function saveMessage(role: string, content: string, convId?: string | null) {
@@ -543,7 +547,19 @@ export default function Home() {
     }, 500);
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // Smart auto-scroll — only scroll to bottom if user hasn't scrolled up
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [hasNewMessage, setHasNewMessage] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setHasNewMessage(false);
+    } else if (messages.length > 0) {
+      setHasNewMessage(true);
+    }
+  }, [messages, userScrolledUp]);
   useEffect(() => { activeConvRef.current = activeConvId; }, [activeConvId]);
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); } }, [activeTab]);
   useEffect(() => {
@@ -994,7 +1010,7 @@ ${context}`;
               Admin
             </a>
           )}
-          <button onClick={() => signOut()} className="text-xs font-medium px-3 py-1.5 transition-all"
+          <button onClick={() => signOut()} className="text-xs font-medium px-3 py-1.5 transition-all hide-mobile"
             style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(237,233,225,0.35)", fontFamily: "var(--font-body)", cursor: "pointer" }}
             onMouseEnter={e => { e.currentTarget.style.color = "rgba(237,233,225,0.6)"; }}
             onMouseLeave={e => { e.currentTarget.style.color = "rgba(237,233,225,0.35)"; }}>
@@ -1007,7 +1023,8 @@ ${context}`;
       {activeTab === "chat" && (
         <div className="flex-1 flex overflow-hidden">
           {/* Chat sidebar */}
-          <div className="shrink-0 flex flex-col sidebar-transition" style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+          <nav aria-label="Conversation history" className="shrink-0 flex flex-col sidebar-transition"
+            style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
             {/* Sidebar header */}
             <div className="shrink-0 flex items-center justify-between px-3 py-3">
               {chatSidebarOpen && (
@@ -1100,15 +1117,26 @@ ${context}`;
                     ))
                   )}
                 </div>
-                {/* Clear all */}
-                <div className="shrink-0 px-3 py-2 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                  <button onClick={() => setConfirmClearAll(true)} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer" }}>
-                    Clear all history
-                  </button>
+                {/* User info + actions */}
+                <div className="shrink-0 px-3 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--color-cream)", flexShrink: 0 }}>
+                      {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
+                    </div>
+                    <span className="text-xs truncate" style={{ color: "rgba(248,246,238,0.7)", maxWidth: 160 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setConfirmClearAll(true)} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer", padding: 0 }}>
+                      Clear history
+                    </button>
+                    <button onClick={() => signOut()} className="text-[10px]" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.25)", cursor: "pointer", padding: 0 }}>
+                      Sign out
+                    </button>
+                  </div>
                 </div>
               </>
             )}
-          </div>
+          </nav>
 
           {/* Mobile sidebar overlay backdrop */}
           {mobileMenuOpen && (
@@ -1134,8 +1162,32 @@ ${context}`;
               </button>
             </div>
           </div>
-          <div role="log" aria-live="polite" aria-label="Conversation messages" className="flex-1 overflow-y-auto px-4 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}>
-            {messages.length === 0 && (
+          <div ref={chatScrollRef} role="log" aria-live="polite" aria-label="Conversation messages" className="flex-1 overflow-y-auto px-4 py-6"
+            style={{ maxWidth: 860, margin: "0 auto", width: "100%" }}
+            onScroll={e => {
+              const el = e.currentTarget;
+              const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+              setUserScrolledUp(!atBottom);
+              if (atBottom) setHasNewMessage(false);
+            }}>
+            {/* Skeleton loading */}
+            {convLoading && (
+              <div className="py-6" style={{ maxWidth: 600 }}>
+                {[1,2,3].map(n => (
+                  <div key={n} className="mb-6">
+                    <div className={n % 2 === 1 ? "flex justify-end" : "flex gap-3"}>
+                      {n % 2 === 0 && <div className="skeleton" style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0 }} />}
+                      <div style={{ maxWidth: n % 2 === 1 ? "60%" : "70%" }}>
+                        <div className="skeleton" style={{ height: 14, width: "90%", marginBottom: 8 }} />
+                        <div className="skeleton" style={{ height: 14, width: "70%", marginBottom: 8 }} />
+                        {n % 2 === 0 && <div className="skeleton" style={{ height: 14, width: "50%" }} />}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!convLoading && messages.length === 0 && (
               <div className="text-center py-6">
                 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-2" style={{ width: 48, height: 48 }}>
                   <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
@@ -1224,6 +1276,12 @@ ${context}`;
             )}
             <div ref={messagesEndRef} />
           </div>
+          {/* New message indicator */}
+          {hasNewMessage && userScrolledUp && (
+            <button className="new-msg-btn" onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); setUserScrolledUp(false); setHasNewMessage(false); }}>
+              ↓ New message
+            </button>
+          )}
           {/* Input area */}
           <div className="shrink-0 px-4 py-4 border-t" style={{ background: "var(--bg-card)", borderColor: "rgba(22,22,22,0.08)" }}>
             <div style={{ maxWidth: 860, margin: "0 auto" }}>
