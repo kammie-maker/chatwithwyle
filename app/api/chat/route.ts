@@ -210,21 +210,34 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
     }
   }
 
-  // 5. SOURCE documents (authoritative)
+  // 5. SOURCE documents (authoritative, cap at 30K)
   if (files.sourceDocs) {
-    parts.push("============================================================\n# PRIMARY SOURCE DOCUMENTS — AUTHORITATIVE\n============================================================\n\nThe following are primary source documents from Freewyld Foundry. They contain the exact fee structure, guarantee terms, contract language, and operational processes. When answering any question about pricing, fees, guarantees, contracts, or processes, use ONLY these documents as your source. Never guess or generalize. If the answer is not in these documents, say so directly.\n\n" + files.sourceDocs);
+    const SOURCE_MAX = 30000;
+    const srcText = files.sourceDocs.length > SOURCE_MAX ? files.sourceDocs.slice(0, SOURCE_MAX) + "\n\n[SOURCE docs truncated]" : files.sourceDocs;
+    parts.push("============================================================\n# PRIMARY SOURCE DOCUMENTS — AUTHORITATIVE\n============================================================\n\nThe following are primary source documents from Freewyld Foundry. They contain the exact fee structure, guarantee terms, contract language, and operational processes. When answering any question about pricing, fees, guarantees, contracts, or processes, use ONLY these documents as your source. Never guess or generalize. If the answer is not in these documents, say so directly.\n\n" + srcText);
   }
 
   // 6. Compiled KB — dynamic truncation
+  const preKbLen = parts.join("\n\n").length;
   if (kb) {
-    const preKbLen = parts.join("\n\n").length;
-    const KB_MAX = preKbLen > 80000 ? 20000 : 40000;
+    const TARGET = 100000;
+    const remaining = Math.max(TARGET - preKbLen, 15000);
+    const KB_MAX = Math.min(remaining, 40000);
     const kbText = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n\n[KB truncated]" : kb;
     parts.push("=== KNOWLEDGE BASE ===\n" + kbText);
   }
 
-  const total = parts.join("\n\n");
-  console.log(`[chat] Prompt built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms). Mode: ${mode}/${interactionMode}. Agents: ${agentKeys.join("+")}. Total: ${total.length.toLocaleString()} chars`);
+  let total = parts.join("\n\n");
+
+  // Hard cap: never exceed 100K
+  if (total.length > 100000) {
+    console.log(`[chat] WARNING: Prompt ${total.length.toLocaleString()} chars exceeds 100K. Hard truncating.`);
+    total = total.slice(0, 100000) + "\n\n[System prompt truncated at 100,000 characters]";
+  }
+
+  // Debug: log each component size
+  const agentSize = agentKeys.reduce((sum, k) => sum + Math.min((agentMap[k]?.content || "").length, AGENT_MAX), 0);
+  console.log(`[chat] Prompt components: format=${(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION).length}, persona=${persona.length}, agents=${agentSize} (${agentKeys.join("+")}), skill=${(skill||"").length}, source=${(files.sourceDocs||"").length}, kb=${kb?.length || 0}. Pre-KB=${preKbLen}. Total=${total.length.toLocaleString()} chars. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
 
   return total;
 }
