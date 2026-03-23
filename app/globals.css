@@ -78,7 +78,7 @@ html { scroll-behavior: smooth; }
 
 /* ── Tour ── */
 .tour-spotlight-target { position: relative !important; z-index: 10001 !important; }
-.tour-backdrop { position: fixed; inset: 0; z-index: 10000; }
+.tour-backdrop { position: fixed; inset: 0; z-index: 10000; pointer-events: all; }
 @keyframes tourFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .tour-tooltip-enter { animation: tourFadeIn 0.2s ease; }
 

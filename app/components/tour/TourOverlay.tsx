@@ -68,12 +68,36 @@ export default function TourOverlay() {
 
   if (!isTourActive || !step) return null;
 
+  const isExpandStep = step.id === "expand-info";
+  const isDraftStep = step.id === "draft-info";
+
   // ── Modal rendering (welcome, completion, info steps) ──
   if (isModal) {
     return (
       <div className="tour-backdrop" style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}>
-        <div className="tour-tooltip-enter" style={{ width: isWelcome || isCompletion ? 480 : 400, maxWidth: "calc(100vw - 32px)", background: "white", borderRadius: 16, padding: isWelcome || isCompletion ? "40px" : "24px 28px", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
+        <div className="tour-tooltip-enter" style={{ width: isWelcome || isCompletion ? 480 : isExpandStep || isDraftStep ? 460 : 400, maxWidth: "calc(100vw - 32px)", background: "white", borderRadius: 16, padding: isWelcome || isCompletion ? "40px" : "24px 28px", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
           {(isWelcome || isCompletion) && <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><WyleAvatar /></div>}
+          {isExpandStep && (
+            <div style={{ marginBottom: 16, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: 16, background: "#fafaf6", textAlign: "left" }}>
+              <svg viewBox="0 0 400 130" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%" }}>
+                <rect width="400" height="130" rx="8" fill="white" stroke="rgba(22,22,22,0.08)" strokeWidth="1" />
+                <rect x="16" y="14" width="240" height="6" rx="2" fill="rgba(22,22,22,0.1)" />
+                <rect x="16" y="26" width="340" height="6" rx="2" fill="rgba(22,22,22,0.07)" />
+                <rect x="16" y="38" width="180" height="6" rx="2" fill="rgba(22,22,22,0.07)" />
+                <line x1="16" y1="56" x2="384" y2="56" stroke="rgba(22,22,22,0.06)" strokeWidth="1" />
+                <text x="16" y="74" fontFamily="sans-serif" fontSize="11" fill={C.olive}>+ More Detail</text>
+                <text x="112" y="74" fontFamily="sans-serif" fontSize="11" fill={C.olive}>+ Full Script</text>
+                <text x="200" y="74" fontFamily="sans-serif" fontSize="11" fill={C.olive}>+ Rep Notes</text>
+                <text x="280" y="74" fontFamily="sans-serif" fontSize="11" fontWeight="600" fill={C.olive}>Expand All</text>
+                <rect x="16" y="88" width="68" height="22" rx="11" fill={C.bark} />
+                <text x="50" y="102" textAnchor="middle" fontFamily="sans-serif" fontSize="9" fill={C.cream}>Draft Text</text>
+                <rect x="90" y="88" width="72" height="22" rx="11" fill={C.bark} />
+                <text x="126" y="102" textAnchor="middle" fontFamily="sans-serif" fontSize="9" fill={C.cream}>Draft Email</text>
+                <rect x="168" y="88" width="86" height="22" rx="11" fill={C.bark} />
+                <text x="211" y="102" textAnchor="middle" fontFamily="sans-serif" fontSize="9" fill={C.cream}>Draft Voicemail</text>
+              </svg>
+            </div>
+          )}
           <h2 style={{ fontSize: isWelcome || isCompletion ? 24 : 18, fontFamily: "Georgia, serif", fontWeight: 600, color: C.onyx, marginBottom: 8 }}>{step.title}</h2>
           <p style={{ fontSize: isWelcome ? 15 : 14, color: "#555", lineHeight: 1.7, whiteSpace: "pre-line", marginBottom: isWelcome ? 8 : 20 }}>{step.content}</p>
           {isWelcome && <p style={{ fontSize: 14, color: "#888", marginBottom: 24 }}>This quick tour walks you through everything you need. Takes about 2 minutes.</p>}
@@ -147,8 +171,8 @@ export default function TourOverlay() {
 
   return (
     <>
-      {/* Backdrop — click to skip */}
-      <div className="tour-backdrop" style={{ background: "transparent" }} onClick={skipTour} />
+      {/* Backdrop — blocks all interaction */}
+      <div className="tour-backdrop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={skipTour} />
       {/* Spotlight cutout */}
       {targetRect && <div style={spotStyle} />}
       {/* Outline on target */}
