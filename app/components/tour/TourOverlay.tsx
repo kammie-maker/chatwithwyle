@@ -128,7 +128,7 @@ export default function TourOverlay() {
   }
 
   // ── Spotlight + tooltip rendering ──
-  const padding = 8;
+  const padding = 10; // enough for 3px outline + 4px offset
   const spotStyle: React.CSSProperties = targetRect ? {
     position: "fixed",
     top: targetRect.top - padding,
@@ -200,10 +200,6 @@ export default function TourOverlay() {
       <div className="tour-backdrop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={skipTour} />
       {/* Spotlight cutout */}
       {targetRect && <div style={spotStyle} />}
-      {/* Outline on target */}
-      {targetRect && (
-        <div style={{ position: "fixed", top: targetRect.top - padding, left: targetRect.left - padding, width: targetRect.width + padding * 2, height: targetRect.height + padding * 2, borderRadius: 10, border: `3px solid ${C.mustard}`, zIndex: 10001, pointerEvents: "none", transition: "all 200ms ease" }} />
-      )}
       {/* Tooltip */}
       {targetRect && (
         <div ref={tooltipRef} className="tour-tooltip-enter" style={{ ...tooltipStyle, background: "white", borderRadius: 12, padding: "20px 24px", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
