@@ -17,7 +17,7 @@ export const BASE_STEPS: TourStep[] = [
     id: "welcome",
     target: "",
     title: "Welcome to Wyle",
-    content: "Wyle is Freewyld Foundry's internal AI tool. It knows our processes, protocols, pricing, and promises \u2014 and helps you communicate them clearly to clients.\n\nThis quick tour walks you through everything you need to get started. Takes about 2 minutes.",
+    content: "Wyle is Freewyld Foundry's internal AI tool. It knows our processes, protocols, pricing, and promises \u2014 and helps you communicate them clearly to clients.",
     placement: "center",
     isModal: true,
   },
