@@ -588,6 +588,62 @@ export default function Home() {
     }
   }
 
+  async function handleModeSwitchRecontextualize() {
+    const newMode = modeSwitchPrompt!;
+    const oldMode = chatMode;
+    setModeSwitchPrompt(null);
+    setChatMode(newMode);
+
+    // Add divider
+    const dividerMsg: Message = { role: "assistant", content: `Recontextualizing for ${MODE_LABELS[newMode]}`, isDivider: true, mode: newMode };
+    const recontextMsg: Message = { role: "assistant", content: "", interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` };
+    setMessages(prev => [...prev, dividerMsg, recontextMsg]);
+    setStreaming(true);
+
+    const recontextIdx = messages.length + 1; // after divider
+    const thisConvId = activeConvId;
+    streamingConvRef.current = thisConvId;
+
+    // Update conversation mode in DB
+    if (thisConvId) {
+      fetch(`/api/conversations/${thisConvId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: newMode }) });
+    }
+
+    try {
+      const contextMessages = [
+        ...messages.filter(m => !m.isDivider).map(m => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: `The user has switched from ${MODE_LABELS[oldMode]} to ${MODE_LABELS[newMode]}. Review the conversation above and provide a recontextualized response that re-answers the most relevant question(s) from the conversation through the lens of ${MODE_LABELS[newMode]}, briefly notes how the previous context is relevant or different from this role's perspective, transitions naturally into being ready to help with ${MODE_LABELS[newMode]} tasks, and follows all ${MODE_LABELS[newMode]} skill file rules exactly including SIMPLE/DEEPER format. Keep it concise. This is a transition, not a full recap.` }
+      ];
+
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: contextMessages, mode: newMode, interactionMode }) });
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+          setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
+        }
+      }
+      fullText = cleanResponse(fullText);
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: fullText, interactionMode, mode: newMode, draftLabel: `${MODE_LABELS[newMode]} view` }; return copy; });
+      }
+      if (thisConvId) saveMessage("assistant", fullText);
+    } catch {
+      if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
+        setMessages(prev => { const copy = [...prev]; copy[recontextIdx] = { role: "assistant", content: "Failed to recontextualize.", interactionMode, mode: newMode }; return copy; });
+      }
+    } finally {
+      streamingConvRef.current = null;
+      setStreaming(false);
+      setBgStreaming(prev => { const next = new Set(prev); next.delete(thisConvId || ""); return next; });
+    }
+  }
+
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
   function cleanResponse(text: string): string {
@@ -1132,17 +1188,24 @@ ${context}`;
             })}
             {/* Mode switch inline prompt */}
             {modeSwitchPrompt && (
-              <div className="my-4 px-4 py-3" style={{ background: "rgba(22,22,22,0.03)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", maxWidth: 480 }}>
+              <div className="my-4 px-4 py-3" style={{ background: "rgba(22,22,22,0.03)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", maxWidth: 520 }}>
                 <p className="text-sm mb-3" style={{ color: "var(--color-onyx)" }}>
-                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>. Start a new chat or continue here?
+                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-start">
                   <button onClick={handleModeSwitchNewChat}
-                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                     New Chat
                   </button>
+                  <div className="flex flex-col items-center">
+                    <button onClick={handleModeSwitchRecontextualize}
+                      style={{ borderRadius: 8, background: "#3c3b22", color: "#f8f6ee", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      Recontextualize
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(22,22,22,0.35)", marginTop: 3 }}>See this through {MODE_LABELS[modeSwitchPrompt]}&apos;s lens</span>
+                  </div>
                   <button onClick={handleModeSwitchContinue}
-                    style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.6)", padding: "6px 16px", fontSize: 13, cursor: "pointer" }}>
+                    style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.6)", padding: "6px 16px", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
                     Continue Here
                   </button>
                 </div>
