@@ -317,6 +317,21 @@ html { scroll-behavior: smooth; }
   /* Footer hidden on mobile */
   footer { display: none !important; }
 
+  /* Sidebar hidden by default on mobile */
+  nav[aria-label="Conversation history"] {
+    display: none !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    z-index: 50 !important;
+    width: 280px !important;
+    min-width: 280px !important;
+  }
+  nav[aria-label="Conversation history"].mobile-open {
+    display: flex !important;
+  }
+
   /* Touch targets */
   button, a, [role="button"] { min-height: 44px; min-width: 44px; }
   input, textarea, select { min-height: 44px; font-size: 16px !important; /* prevent iOS zoom */ }

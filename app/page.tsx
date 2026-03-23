@@ -1006,7 +1006,7 @@ ${context}`;
           {/* Mobile hamburger */}
           {activeTab === "chat" && (
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Open conversation menu" className="hide-desktop"
-              style={{ background: "none", border: "none", color: "var(--color-cream)", cursor: "pointer", padding: 8, display: "none" }}>
+              style={{ background: "none", border: "none", color: "var(--color-cream)", cursor: "pointer", padding: 8 }}>
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 20, height: 20 }}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
             </button>
           )}
@@ -1050,7 +1050,7 @@ ${context}`;
       {activeTab === "chat" && (
         <div className="flex-1 flex overflow-hidden">
           {/* Chat sidebar */}
-          <nav aria-label="Conversation history" className="shrink-0 flex flex-col sidebar-transition"
+          <nav aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
             style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
             {/* Sidebar header */}
             <div className="shrink-0 flex items-center justify-between px-3 py-3">
@@ -1060,11 +1060,21 @@ ${context}`;
                   <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
                 </svg>
               )}
-              <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4, marginLeft: chatSidebarOpen ? 0 : "auto", marginRight: chatSidebarOpen ? 0 : "auto" }}>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: chatSidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Mobile close button */}
+                {mobileMenuOpen && (
+                  <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="hide-desktop"
+                    style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4 }}>
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                )}
+                {/* Desktop collapse button */}
+                <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} aria-label={chatSidebarOpen ? "Collapse sidebar" : "Expand sidebar"} className="hide-mobile" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4, marginLeft: chatSidebarOpen ? 0 : "auto", marginRight: chatSidebarOpen ? 0 : "auto" }}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: chatSidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+              </div>
             </div>
             {chatSidebarOpen && (
               <>
@@ -1084,19 +1094,20 @@ ${context}`;
                 {/* Conversation list */}
                 <div className="flex-1 overflow-y-auto px-1.5">
                   {searchResults !== null ? (
-                    searchResults.length === 0 ? <div className="text-xs text-center py-4" style={{ color: "rgba(248,246,238,0.3)" }}>No results</div> : (
-                      searchResults.map(c => (
+                    searchResults.length === 0 ? <div className="text-xs text-center py-6" style={{ color: "rgba(248,246,238,0.3)" }}>No conversations found</div> : (
+                      searchResults.map((c: Conversation & { snippet?: string }) => (
                         <button key={c.id} onClick={() => { loadConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
-                          className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)" }}
+                          className="w-full text-left px-3 py-2 mb-0.5 transition-all" style={{ borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", color: "rgba(248,246,238,0.85)", minHeight: 44 }}
                           onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                           <div className="text-xs truncate">{c.title}</div>
+                          {c.snippet && <div className="text-[10px] truncate mt-0.5" style={{ color: "rgba(248,246,238,0.35)" }}>{c.snippet.substring(0, 80)}</div>}
                         </button>
                       ))
                     )
                   ) : (
                     groupByDate(conversations).map(group => (
                       <div key={group.label} className="mb-2">
-                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "rgba(248,246,238,0.3)" }}>{group.label}</div>
+                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider sticky top-0" style={{ color: "rgba(248,246,238,0.3)", background: "#161616", zIndex: 1, borderTop: group.label === "Pinned" ? "none" : "1px solid rgba(255,255,255,0.04)" }}>{group.label}</div>
                         {group.items.map(c => {
                           const badge = MODE_BADGES[c.mode] || MODE_BADGES.sales;
                           const isActive = c.id === activeConvId;
@@ -1168,7 +1179,7 @@ ${context}`;
 
           {/* Mobile sidebar overlay backdrop */}
           {mobileMenuOpen && (
-            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)", display: "none" }} onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
+            <div className="fixed inset-0 z-40 sidebar-overlay hide-desktop" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
           )}
 
           {/* Chat content */}
@@ -1360,15 +1371,15 @@ ${context}`;
                   onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.color = "var(--color-olive)"; }} title="Attach files" aria-label="Attach file">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
                 </button>
-                <textarea ref={textareaRef} className="flex-1 px-4 py-3 text-sm focus:outline-none transition-all" rows={1}
+                <textarea ref={textareaRef} className="flex-1 px-4 py-3 focus:outline-none transition-all" rows={1}
                   style={{ borderRadius: "12px", background: "var(--bg-card)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)", resize: "none", overflow: "hidden", maxHeight: 200 }}
                   onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
                   placeholder="Ask Wyle anything..." aria-label="Message input" value={input} onChange={e => { setInput(e.target.value); autoResizeTextarea(); }}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} disabled={streaming} />
-                <button onClick={handleSend} disabled={streaming || (!input.trim() && pendingFiles.length === 0)} aria-label="Send message" className="px-5 py-3 text-sm font-semibold disabled:opacity-40 transition-all"
-                  style={{ borderRadius: "12px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer", minHeight: 44 }}>
-                  Send
+                <button onClick={handleSend} disabled={streaming || (!input.trim() && pendingFiles.length === 0)} aria-label="Send message" className="btn-primary px-5 py-3 font-semibold disabled:opacity-40"
+                  style={{ borderRadius: "12px", minHeight: 44 }}>
+                  {streaming ? <Spinner size={16} color="var(--color-onyx)" /> : "Send"}
                 </button>
               </div>
             </div>
