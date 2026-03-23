@@ -58,15 +58,15 @@ function ActionsMenu({ user, onAction, onUpdate }: { user: User; onAction: (type
       <button ref={btnRef} onClick={toggle} aria-label="User actions" style={{ background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 18, color: "#555", lineHeight: 1, minHeight: 36, minWidth: 36 }}>&hellip;</button>
       {open && (
         <div ref={ref} style={{ position: "fixed", top: pos.top, left: pos.left, background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,0.1)", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 9999, minWidth: 220, overflow: "hidden" }}>
-          {/* Default Mode */}
-          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>Default Mode</div>
+          {/* Set default mode */}
+          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>Set default mode</div>
           <div style={{ padding: "0 16px 10px" }}>
             <select value={user.defaultMode || "sales"} onChange={e => onUpdate({ defaultMode: e.target.value })} onClick={e => e.stopPropagation()} style={selStyle}>
               <option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option>
             </select>
           </div>
-          {/* Default Interaction */}
-          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", borderTop: "1px solid rgba(0,0,0,0.06)" }}>Default Interaction</div>
+          {/* Set default view */}
+          <div style={{ padding: "10px 16px 6px", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", borderTop: "1px solid rgba(0,0,0,0.06)" }}>Set default view</div>
           <div style={{ padding: "0 16px 10px" }}>
             <select value={user.defaultInteraction || "client"} onChange={e => onUpdate({ defaultInteraction: e.target.value })} onClick={e => e.stopPropagation()} style={selStyle}>
               <option value="client">Client Interaction</option><option value="research">Internal Research</option>
@@ -309,8 +309,8 @@ export default function AdminPage() {
             <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@freewyld.com" className="w-full px-4 py-3 text-sm mb-3 focus:outline-none" style={{ borderRadius: 10, background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.1)" }} />
             <div className="flex flex-wrap gap-3 mb-4">
               <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Role</span><select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin"|"standard")} style={sel}><option value="standard">Standard</option><option value="admin">Admin</option></select></div>
-              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Mode</span><select value={inviteMode} onChange={e => setInviteMode(e.target.value)} style={sel}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select></div>
-              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "rgba(22,22,22,0.5)" }}>Type</span><select value={inviteInteraction} onChange={e => setInviteInteraction(e.target.value)} style={sel}><option value="client">Client Interaction</option><option value="research">Internal Research</option></select></div>
+              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "var(--text-muted)" }}>Uses Wyle for</span><select value={inviteMode} onChange={e => setInviteMode(e.target.value)} style={sel}><option value="sales">Sales</option><option value="client-success">Client Success</option><option value="fulfillment">Revenue Mgmt</option><option value="onboarding">Onboarding</option></select></div>
+              <div className="flex items-center gap-2"><span className="text-xs" style={{ color: "var(--text-muted)" }}>Default view</span><select value={inviteInteraction} onChange={e => setInviteInteraction(e.target.value)} style={sel}><option value="client">Client Interaction</option><option value="research">Internal Research</option></select></div>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); }} className="btn-outline">Cancel</button>

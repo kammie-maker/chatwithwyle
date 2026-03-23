@@ -225,9 +225,9 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
         </svg>
       </div>
       <div className="msg-bubble-assistant group/msg" style={{ overflow: "hidden", minWidth: 0, position: "relative" }}>
-        {/* Copy button */}
+        {/* Copy button — positioned top right */}
         {!isStreaming && simpleContent && (
-          <div className="absolute top-2 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity" style={{ zIndex: 2 }}>
+          <div className="absolute opacity-0 group-hover/msg:opacity-100 transition-opacity" style={{ top: 12, right: 12, zIndex: 2 }}>
             <CopyButton text={[simpleContent, ...Object.values(inlineExpanded)].join("\n\n")} />
           </div>
         )}
@@ -238,7 +238,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             {isDraft && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "var(--text-muted)", fontWeight: 600 }}>{draftLabel}</span>}
           </div>
         )}
-        <div className="px-4 py-3" style={isResearch || isDraft ? { paddingTop: 8 } : undefined}>
+        <div className="py-3" style={{ paddingLeft: 20, paddingRight: 40, paddingTop: isResearch || isDraft ? 8 : undefined }}>
           {/* Error state */}
           {isError ? (
             <div role="alert" className="flex items-center gap-3">
@@ -1067,18 +1067,6 @@ ${context}`;
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {isAdminUser && (
-            <a href="/admin" className="text-xs font-medium px-3 py-1.5 transition-all hide-mobile"
-              style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(237,233,225,0.45)", textDecoration: "none", fontFamily: "var(--font-body)" }}>
-              Admin
-            </a>
-          )}
-          <button onClick={() => signOut()} className="text-xs font-medium px-3 py-1.5 transition-all hide-mobile"
-            style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(237,233,225,0.35)", fontFamily: "var(--font-body)", cursor: "pointer" }}
-            onMouseEnter={e => { e.currentTarget.style.color = "rgba(237,233,225,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "rgba(237,233,225,0.35)"; }}>
-            Sign out
-          </button>
         </div>
       </header>
 
@@ -1092,13 +1080,7 @@ ${context}`;
             onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
             onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
             {/* Sidebar header */}
-            <div className="shrink-0 flex items-center justify-between px-3 py-3">
-              {chatSidebarOpen && (
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 24, height: 24, flexShrink: 0 }} aria-hidden="true">
-                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
-                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
-                </svg>
-              )}
+            <div className="shrink-0 flex items-center justify-end px-3 py-3">
               <div className="flex items-center gap-1">
                 {/* Mobile close button */}
                 {mobileMenuOpen && (
@@ -1127,8 +1109,8 @@ ${context}`;
                 {/* Search */}
                 <div className="px-3 mb-2">
                   <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
-                    className="w-full px-3 py-1.5 text-xs focus:outline-none"
-                    style={{ borderRadius: 6, background: "rgba(255,255,255,0.07)", border: "none", color: "rgba(248,246,238,0.85)" }} />
+                    className="w-full px-3 py-2 focus:outline-none"
+                    style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#f8f6ee", fontSize: 15 }} />
                 </div>
                 {/* Conversation list */}
                 <div className="flex-1 overflow-y-auto px-1.5">
@@ -1170,7 +1152,7 @@ ${context}`;
                                 ) : (
                                   <div className="flex items-center gap-1.5">
                                     <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 4, background: badge.bg, color: "#f8f6ee", fontWeight: 600 }}>{badge.label}</span>
-                                    <span className="text-xs truncate" style={{ maxWidth: 160 }}>{c.title}</span>
+                                    <span className="truncate" style={{ maxWidth: 160, fontSize: 15, color: "#f8f6ee" }}>{c.title}</span>
                                     {c.pinned && <span style={{ fontSize: 9, color: "#CC8A39" }}>&#x1F4CC;</span>}
                                     {(bgStreaming.has(c.id) || (streamingConvRef.current === c.id && streaming)) && (
                                       <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "#CC8A39", flexShrink: 0 }} />
@@ -1200,16 +1182,16 @@ ${context}`;
                     <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--color-cream)", flexShrink: 0 }}>
                       {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
                     </div>
-                    <span className="text-xs truncate" style={{ color: "rgba(248,246,238,0.7)", maxWidth: 160 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                    <span className="truncate" style={{ color: "#f8f6ee", maxWidth: 160, fontSize: 14 }}>{session?.user?.name || session?.user?.email || ""}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setConfirmClearAll(true)} className="text-xs" style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0 }}>
-                      Clear history
-                    </button>
-                    <button onClick={() => signOut()} className="text-xs" style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0 }}>
+                  <div className="flex items-center gap-4 mt-2">
+                    {isAdminUser && <a href="/admin" style={{ fontSize: 13, color: "var(--color-olive)", textDecoration: "none", background: "rgba(255,255,255,0.08)", padding: "3px 10px", borderRadius: 4 }}>Admin</a>}
+                    <button onClick={() => signOut()} style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0, fontSize: 13 }}>
                       Sign out
                     </button>
-                    {isAdminUser && <a href="/admin" className="text-xs" style={{ color: "var(--text-muted-dark)", textDecoration: "none" }}>Admin</a>}
+                    <button onClick={() => setConfirmClearAll(true)} style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0, fontSize: 13 }}>
+                      Clear history
+                    </button>
                   </div>
                 </div>
               </>
@@ -1324,8 +1306,8 @@ ${context}`;
                       onDraft={(action) => sendDraftAction(action, i)}
                       handleClarifyOption={handleClarifyOption} clarifyInput={clarifyInput} setClarifyInput={setClarifyInput} />
                   ) : (
-                    <div className="inline-block msg-bubble-user text-sm group/usrmsg relative" style={{ padding: hasMedia ? "0.5rem" : "0.625rem 1rem" }}>
-                      {userText && <div className="absolute top-1 right-1 opacity-0 group-hover/usrmsg:opacity-100 transition-opacity"><CopyButton text={userText} /></div>}
+                    <div className="inline-block msg-bubble-user text-sm group/usrmsg relative" style={{ padding: hasMedia ? "0.5rem" : "0.625rem 1rem", paddingRight: 36 }}>
+                      {userText && <div className="absolute opacity-0 group-hover/usrmsg:opacity-100 transition-opacity" style={{ top: 8, right: 8 }}><CopyButton text={userText} /></div>}
                       {imageBlocks.map((img, j) => <img key={j} src={`data:${img.source.media_type};base64,${img.source.data}`} alt="Uploaded" style={{ maxWidth: 200, borderRadius: "10px", display: "block", marginBottom: "0.5rem" }} />)}
                       {docBlocks.map((_, j) => <div key={`doc-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>PDF</div>)}
                       {fileTextBlocks.map((ftb, j) => { const fname = ftb.text.match(/^--- (.+?) ---/)?.[1] || "file"; return <div key={`ftb-${j}`} className="flex items-center gap-1.5 px-2 py-1 mb-1" style={{ background: "rgba(255,255,255,0.15)", borderRadius: "6px", fontSize: "11px" }}><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>{fname}</div>; })}
