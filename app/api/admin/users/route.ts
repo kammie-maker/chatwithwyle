@@ -72,7 +72,7 @@ function buildHtmlEmail(firstName: string, adminName: string, toEmail: string, d
 }
 
 async function sendWelcomeEmail(accessToken: string, toEmail: string, firstName: string, defaultMode: string, defaultInteraction: string, adminName: string): Promise<boolean> {
-  const subject = "You're in — welcome to Wyle";
+  const subject = "=?UTF-8?B?" + Buffer.from("You're in \u2014 welcome to Wyle").toString("base64") + "?=";
   const htmlBody = buildHtmlEmail(firstName, adminName, toEmail, defaultMode, defaultInteraction);
 
   const email = [
