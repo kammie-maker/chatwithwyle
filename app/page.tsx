@@ -7,15 +7,21 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const cleanText = text.replace(/\[\[EXPAND_PROMPT\]\]/g, "").replace(/\[\[CLARIFY\]\][\s\S]*/g, "").replace(/^#{2,4}\s+\S+.*$/gm, "").replace(/^---+$/gm, "").replace(/\u2014/g, " ").replace(/\u2013/g, " ").replace(/ {2,}/g, " ").trim();
   return (
-    <button onClick={() => { navigator.clipboard.writeText(cleanText); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      aria-label="Copy message to clipboard" title="Copy"
-      style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: copied ? "var(--color-mustard)" : "#555", transition: "color 0.15s", lineHeight: 1, minWidth: 32, minHeight: 32 }}>
-      {copied ? (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-      ) : (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+    <div style={{ position: "relative" }}>
+      {copied && (
+        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", right: 0, background: "#3c3b22", color: "#f8f6ee", fontSize: 11, borderRadius: 4, padding: "3px 8px", whiteSpace: "nowrap", pointerEvents: "none", animation: "fadeIn 0.15s ease" }}>
+          Copied!
+        </div>
       )}
-    </button>
+      <button onClick={() => { navigator.clipboard.writeText(cleanText); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        aria-label="Copy message to clipboard"
+        className="copy-icon-btn"
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "rgba(0,0,0,0.25)", transition: "color 150ms ease", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
+        onMouseEnter={e => e.currentTarget.style.color = "#CC8A39"}
+        onMouseLeave={e => { if (!copied) e.currentTarget.style.color = "rgba(0,0,0,0.25)"; }}>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+      </button>
+    </div>
   );
 }
 
@@ -232,10 +238,10 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
         </svg>
       </div>
-      <div className="msg-bubble-assistant group/msg" style={{ overflow: "hidden", minWidth: 0, position: "relative" }}>
+      <div className="msg-bubble-assistant group/msg" style={{ overflow: "visible", minWidth: 0, position: "relative", paddingRight: 44 }}>
         {/* Copy button — positioned top right */}
         {!isStreaming && simpleContent && (
-          <div className="absolute opacity-0 group-hover/msg:opacity-100 transition-opacity" style={{ top: 12, right: 12, zIndex: 2 }}>
+          <div className="copy-icon-wrap" style={{ position: "absolute", top: 12, right: 12, zIndex: 2, opacity: 0, transition: "opacity 150ms ease" }}>
             <CopyButton text={[simpleContent, ...Object.values(inlineExpanded)].join("\n\n")} />
           </div>
         )}
@@ -246,7 +252,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
             {isDraft && <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(22,22,22,0.06)", color: "var(--text-muted)", fontWeight: 600 }}>{draftLabel}</span>}
           </div>
         )}
-        <div className="py-3" style={{ paddingLeft: 20, paddingRight: 40, paddingTop: isResearch || isDraft ? 8 : undefined }}>
+        <div className="py-3" style={{ paddingLeft: 20, paddingRight: 0, paddingTop: isResearch || isDraft ? 8 : undefined }}>
           {/* Error state */}
           {isError ? (
             <div role="alert" className="flex items-center gap-3">

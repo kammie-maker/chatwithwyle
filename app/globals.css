@@ -114,6 +114,7 @@ html { scroll-behavior: smooth; }
 .msg-bubble { padding: 18px 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(22,22,22,0.08); }
 .msg-bubble-user { background: var(--color-bark); color: var(--color-cream); border-radius: 16px 16px 4px 16px; max-width: 75%; }
 .msg-bubble-assistant { background: var(--bg-card); color: var(--color-onyx); border: 1px solid rgba(22,22,22,0.08); border-radius: 12px; max-width: 100%; }
+.msg-bubble-assistant:hover .copy-icon-wrap { opacity: 1 !important; }
 
 /* ── Chat content container ── */
 .chat-content-container { max-width: 820px; padding-left: 32px; padding-right: 32px; margin: 0 auto; }
@@ -158,6 +159,8 @@ html { scroll-behavior: smooth; }
   nav[aria-label="Conversation history"] { display: none !important; position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important; z-index: 50 !important; width: 280px !important; min-width: 280px !important; max-width: 280px !important; }
   nav[aria-label="Conversation history"].mobile-open { display: flex !important; }
   .group\/msg .absolute, .group\/usrmsg .absolute { opacity: 1 !important; }
+  .copy-icon-wrap { opacity: 1 !important; }
+  .copy-icon-btn { color: rgba(0,0,0,0.35) !important; }
   button, a, [role="button"] { min-height: 44px; min-width: 44px; }
   input, textarea, select { min-height: 44px; font-size: 16px !important; }
 }
