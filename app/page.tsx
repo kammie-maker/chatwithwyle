@@ -729,9 +729,9 @@ export default function Home() {
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
   function cleanResponse(text: string): string {
+    // Only clean formatting issues — do NOT strip [[EXPAND_PROMPT]] or [[CLARIFY]] here
+    // Those tokens are parsed by parseResponse() in the render layer
     return text
-      .replace(/\[\[EXPAND_PROMPT\]\]/g, "")
-      .replace(/\[\[CLARIFY\]\][\s\S]*/g, "")
       .replace(/^---+$/gm, "")
       .replace(/\u2014/g, " ")
       .replace(/\u2013/g, " ")

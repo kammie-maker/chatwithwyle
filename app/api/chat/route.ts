@@ -134,6 +134,10 @@ const FALLBACK_PERSONA = `You are Wyle, the AI assistant for Freewyld Foundry, a
 
 const CLIENT_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION:
 
+EVERY response must begin with exactly this line:
+## SIMPLE
+Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No exceptions.
+
 - NEVER use em dashes or en dashes. Rewrite the sentence instead. Zero exceptions.
 - Never use colons in response text
 - Never use bold text inside paragraphs
@@ -239,9 +243,6 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
 
   const knowledgeChars = config.knowledge.reduce((s, k) => s + (files[k]?.length || 0), 0);
   console.log(`[chat] Prompt: agents=${config.agents.length}, knowledge=${knowledgeChars}, format=${formatContent.length}, total=${total.length.toLocaleString()} chars. Mode: ${mode}/${interactionMode}. Built in ${Date.now() - t0}ms (fetch: ${t1 - t0}ms)`);
-  // Debug: log prompt start and key checks
-  console.log(`[chat] DEBUG prompt first 2000 chars:\n${total.substring(0, 2000)}`);
-  console.log(`[chat] DEBUG checks: hasCritical=${total.includes("CRITICAL FORMAT INSTRUCTION")}, hasSIMPLE=${total.includes("## SIMPLE")}, hasExpandPrompt=${total.includes("EXPAND_PROMPT")}, hasSkillFile=${total.includes("RESPONSE FORMAT")}`);
 
   return total;
 }
@@ -288,8 +289,7 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(event.delta.text));
           }
         }
-        console.log(`[chat] Stream complete at +${Date.now() - t0}ms. Raw response (first 500): ${rawResponse.substring(0, 500)}`);
-        console.log(`[chat] DEBUG raw response checks: hasExpandPrompt=${rawResponse.includes("[[EXPAND_PROMPT]]")}, hasSIMPLE=${rawResponse.includes("## SIMPLE")}, hasMoreDetail=${rawResponse.includes("MORE DETAIL")}, length=${rawResponse.length}`);
+        console.log(`[chat] Stream complete at +${Date.now() - t0}ms. Length=${rawResponse.length}. HasSIMPLE=${rawResponse.includes("## SIMPLE")}. HasExpand=${rawResponse.includes("[[EXPAND_PROMPT]]")}`);
         controller.close();
       },
     });
