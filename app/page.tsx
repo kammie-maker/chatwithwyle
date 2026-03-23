@@ -1141,9 +1141,9 @@ ${context}`;
         {chatSidebarOpen ? (
           <>
             {/* New chat button */}
-            <div className="px-3 mb-2">
-              <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setExpandOrder({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full font-semibold"
-                style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 48, fontSize: 16, fontWeight: 600 }}>
+            <div style={{ margin: "12px 12px 8px 12px" }}>
+              <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setExpandOrder({}); setMobileMenuOpen(false); }} aria-label="Start new conversation"
+                style={{ width: "100%", borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 40, fontSize: 14, fontWeight: 600, padding: "0 16px" }}>
                 + New Chat
               </button>
             </div>
@@ -1459,23 +1459,21 @@ ${context}`;
             })}
             {/* Mode switch inline prompt */}
             {modeSwitchPrompt && (
-              <div className="my-4 px-4 py-3" style={{ background: "rgba(22,22,22,0.03)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", maxWidth: 520 }}>
-                <p className="text-sm mb-3" style={{ color: "var(--color-onyx)" }}>
-                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>. Start fresh or bring your conversation with you?
+              <div style={{ background: "#ffffff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: "16px 20px", maxWidth: 480, margin: "16px auto", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+                <p style={{ fontSize: 15, color: "var(--color-onyx)", margin: "0 0 12px 0" }}>
+                  You switched to <span style={{ fontWeight: 600 }}>{MODE_LABELS[modeSwitchPrompt]}</span>. Start fresh or bring your conversation with you?
                 </p>
-                <div className="flex gap-2 items-start">
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
                   <button onClick={handleModeSwitchNewChat}
-                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", height: 40, padding: "0 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                     New Chat
                   </button>
-                  <div className="flex flex-col items-center">
-                    <button onClick={handleModeSwitchRecontextualize}
-                      style={{ borderRadius: 8, background: "#3c3b22", color: "#f8f6ee", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      Bring Context
-                    </button>
-                    <span style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Wyle will re-read this conversation and respond as {MODE_LABELS[modeSwitchPrompt]}</span>
-                  </div>
+                  <button onClick={handleModeSwitchRecontextualize}
+                    style={{ borderRadius: 8, background: "#3c3b22", color: "#f8f6ee", border: "none", height: 40, padding: "0 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    Bring Context
+                  </button>
                 </div>
+                <p style={{ fontSize: 13, color: "#888", margin: "4px 0 0 0" }}>Wyle will re-read this conversation and respond as {MODE_LABELS[modeSwitchPrompt]}</p>
               </div>
             )}
             <div ref={messagesEndRef} />
