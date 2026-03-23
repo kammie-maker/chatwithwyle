@@ -428,6 +428,8 @@ export default function Home() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [chatSidebarOpen, setChatSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -627,11 +629,20 @@ export default function Home() {
       else if (confirmClearAll) setConfirmClearAll(false);
       else if (forceRewriteConfirm) setForceRewriteConfirm(false);
       else if (confirmRewrite) setConfirmRewrite(false);
+      else if (profileMenuOpen) setProfileMenuOpen(false);
       else if (mobileMenuOpen) setMobileMenuOpen(false);
     }
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
-  }, [modeDropdownOpen, modeSwitchPrompt, confirmDeleteConv, confirmClearAll, forceRewriteConfirm, confirmRewrite, mobileMenuOpen]);
+  }, [modeDropdownOpen, modeSwitchPrompt, confirmDeleteConv, confirmClearAll, forceRewriteConfirm, confirmRewrite, profileMenuOpen, mobileMenuOpen]);
+
+  // Close profile menu on outside click
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    function close(e: MouseEvent) { if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) setProfileMenuOpen(false); }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [profileMenuOpen]);
 
   function switchMode(mode: ChatMode) {
     if (mode === chatMode) { setModeDropdownOpen(false); return; }
@@ -1080,30 +1091,50 @@ ${context}`;
             onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
             onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
             onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
-            {/* Sidebar header */}
-            <div className="shrink-0 flex items-center justify-end px-3 py-3">
-              <div className="flex items-center gap-1">
-                {/* Mobile close button */}
-                {mobileMenuOpen && (
-                  <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="hide-desktop"
-                    style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4 }}>
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                )}
-                {/* Desktop collapse button */}
-                <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} aria-label={chatSidebarOpen ? "Collapse sidebar" : "Expand sidebar"} className="hide-mobile" style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 4, marginLeft: chatSidebarOpen ? 0 : "auto", marginRight: chatSidebarOpen ? 0 : "auto" }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: chatSidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            {/* Sidebar header — logo + collapse in one row */}
+            <div className="shrink-0 flex items-center justify-between" style={{ height: 64, padding: "0 16px" }}>
+              {chatSidebarOpen ? (
+                <div className="flex items-center gap-3">
+                  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 40, height: 40, flexShrink: 0 }} aria-hidden="true">
+                    <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                    <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+                    <text x="50" y="84" textAnchor="middle" fontFamily="Georgia, serif" fontSize="9" fontWeight="600" fill="#3c3b22" letterSpacing="3" opacity="0.85">WYLE</text>
                   </svg>
+                  <span style={{ fontSize: 20, fontWeight: 600, color: "#f8f6ee", fontFamily: "var(--font-heading)" }}>Wyle</span>
+                </div>
+              ) : (
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 32, height: 32, margin: "0 auto" }} aria-hidden="true">
+                  <rect width="100" height="100" rx="20" fill="#CC8A39"/><rect width="100" height="100" rx="20" fill="#663925" opacity="0.12"/>
+                  <text x="50" y="68" textAnchor="middle" fontFamily="Georgia, serif" fontSize="58" fontWeight="700" fill="#3c3b22">W</text>
+                </svg>
+              )}
+              {chatSidebarOpen && (
+                <div className="flex items-center gap-1">
+                  {mobileMenuOpen && (
+                    <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="hide-desktop"
+                      style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6 }}>
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                  <button onClick={() => setChatSidebarOpen(!chatSidebarOpen)} aria-label="Collapse sidebar" className="hide-mobile"
+                    style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6 }}>
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                  </button>
+                </div>
+              )}
+              {!chatSidebarOpen && (
+                <button onClick={() => setChatSidebarOpen(true)} aria-label="Expand sidebar" className="hide-mobile"
+                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6, position: "absolute", top: 68, left: 12 }}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16, transform: "rotate(180deg)" }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
                 </button>
-              </div>
+              )}
             </div>
             {chatSidebarOpen && (
               <>
                 {/* New chat button */}
                 <div className="px-3 mb-2">
-                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full py-2 text-xs font-semibold"
-                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", minHeight: 44 }}>
+                  <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setMobileMenuOpen(false); }} aria-label="Start new conversation" className="w-full font-semibold"
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 48, fontSize: 16, fontWeight: 600 }}>
                     + New Chat
                   </button>
                 </div>
@@ -1177,25 +1208,66 @@ ${context}`;
                     ))
                   )}
                 </div>
-                {/* User info + actions */}
-                <div className="shrink-0 px-3 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--color-cream)", flexShrink: 0 }}>
+                {/* Profile row + popover */}
+                <div ref={profileMenuRef} className="shrink-0 relative" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  {/* Profile popover — opens upward */}
+                  {profileMenuOpen && (
+                    <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
+                      {/* Preferences */}
+                      <div style={{ padding: "12px 16px" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>I usually use Wyle for</div>
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
+                            <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
+                              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: chatMode === m ? "#CC8A39" : "rgba(22,22,22,0.06)", color: chatMode === m ? "#161616" : "var(--color-onyx)", fontWeight: chatMode === m ? 600 : 400 }}>
+                              {MODE_LABELS[m]}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default view</div>
+                        <div className="flex gap-1 mb-1">
+                          {(["client", "research"] as InteractionMode[]).map(v => (
+                            <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
+                              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
+                              {v === "client" ? "Client Interaction" : "Internal Research"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }} />
+                      {/* Actions */}
+                      <div style={{ padding: "8px 0" }}>
+                        {isKbUser && <a href="/admin" style={{ display: "block", padding: "8px 16px", fontSize: 14, color: "var(--color-olive)", textDecoration: "none" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          {isAdminUser ? "Admin Panel" : "Knowledge Base"}
+                        </a>}
+                        <button onClick={() => { setProfileMenuOpen(false); setConfirmClearAll(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          Clear History
+                        </button>
+                        <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Profile row trigger */}
+                  <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
+                    style={{ padding: "12px 16px", height: 56, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
                       {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
                     </div>
-                    <span className="truncate" style={{ color: "#f8f6ee", maxWidth: 130, fontSize: 14 }}>{session?.user?.name || session?.user?.email || ""}</span>
-                    {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600 }}>Admin</span>}
-                    {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600 }}>KB</span>}
-                  </div>
-                  <div className="flex items-center gap-4 mt-2">
-                    {isAdminUser && <a href="/admin" style={{ fontSize: 13, color: "var(--color-olive)", textDecoration: "none", background: "rgba(255,255,255,0.08)", padding: "3px 10px", borderRadius: 4 }}>Admin</a>}
-                    <button onClick={() => signOut()} style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0, fontSize: 13 }}>
-                      Sign out
-                    </button>
-                    <button onClick={() => setConfirmClearAll(true)} style={{ background: "none", border: "none", color: "var(--text-muted-dark)", cursor: "pointer", padding: 0, fontSize: 13 }}>
-                      Clear history
-                    </button>
-                  </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                        {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
+                        {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
+                      </div>
+                    </div>
+                    <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
+                  </button>
                 </div>
               </>
             )}
