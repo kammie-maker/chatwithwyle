@@ -21,11 +21,26 @@ let fileCache: CachedFiles | null = null;
 let kbCache: { text: string; fetchedAt: number } | null = null;
 const CACHE_TTL = 60 * 60 * 1000;
 
-// Files we actually need — fetch by name only
-const NEEDED_FILES = [
-  "Persona-Wyle.md", "Agent-Sales.md", "Agent-CEO.md", "Agent-RevenueExpert.md",
-  "Skill-Sales.md", "Skill-ClientSuccess.md", "Skill-Fulfillment.md", "Skill-Onboarding.md",
-];
+// Exact files we need — keyed by file ID for direct fetch (no list_files needed)
+const FILE_IDS: Record<string, string> = {
+  "Persona-Wyle.md": "1fB36Og4zWv8ZbNcP3-ZjvgllDz6YHq5A",
+  "Agent-Sales.md": "1AMagcPRL3_gMVDsjVXj_e5zfYcJYa3sG",
+  "Agent-CEO.md": "1m4YMdlb3u0SjNvHs_ISKJB4Gl3G6y6C8",
+  "Agent-RevenueExpert.md": "1CwJ5WtPWd971CJoNK38vmg4Sg8PUNFut",
+  "Skill-Sales.md": "1L3l2rQyj4hmRzGKPF78FdAxHKASYwyxx",
+  "Skill-ClientSuccess.md": "1IioAVstYQ5Y91dKpA8OY0ecmm6rJ3xnZ",
+  "Skill-Fulfillment.md": "1jHFGc9g5mMZPSohr_WtzZ48VoIKRGa1E",
+  "Skill-Onboarding.md": "1BNn5kKsmObMFZxLFxVHj7S71MRnhYKXP",
+};
+
+// Only the critical SOURCE files — pricing/contracts/guarantee (not transcripts)
+const SOURCE_FILE_IDS: Record<string, string> = {
+  "SOURCE-Pricing-Contracts-General-Revenue-Pricing-Management-Contract---January-26-202.md": "1jrVfwpCcV8LjX3bdBTW1KUbeo2_84CRs",
+  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Fee-Calculation-Memo---January-26.md": "1cQ_JIEFiRI1A8DPvmL8o2CLestukurcI",
+  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Fee-Structure-Negotiation-Guideli.md": "1xMTxBj6F-Gt1_U9X9g7xl0ZzYkJta3He",
+  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-Garuantee---January-26-2026---Pri.md": "14nb9ph-RFY0Fpv0IBa7EeYov7F2-eZcs",
+  "SOURCE-Pricing-Contracts-Revenue-Pricing-Management-How-Estimated-Next-12-Months-Reve.md": "1cCEBI9Cm4usyO-4TiBym8hGuU_L7hTDR",
+};
 
 async function fetchAllFiles(): Promise<CachedFiles> {
   if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache;
@@ -36,28 +51,19 @@ async function fetchAllFiles(): Promise<CachedFiles> {
   if (!webhookUrl || !password) return emptyFiles();
 
   try {
-    // Step 1: list files to get IDs (fast, small response)
-    const listRes = await fetch(webhookUrl, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "list_files", password }), redirect: "follow",
-    });
-    const listData = await listRes.json();
-    const allFiles: { id: string; name: string }[] = listData.files || [];
+    // Fetch all needed files in parallel by ID — no list_files call needed
+    const allIds = { ...FILE_IDS, ...SOURCE_FILE_IDS };
+    const entries = Object.entries(allIds);
 
-    // Filter to only files we need + SOURCE- files
-    const needed = allFiles.filter(f => NEEDED_FILES.includes(f.name) || f.name.startsWith("SOURCE-"));
-
-    // Step 2: fetch each needed file in parallel
-    const fetches = needed.map(async (f) => {
+    const results = await Promise.all(entries.map(async ([name, id]) => {
       const r = await fetch(webhookUrl, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get_file", fileId: f.id, password }), redirect: "follow",
+        body: JSON.stringify({ action: "get_file", fileId: id, password }), redirect: "follow",
       });
       const d = await r.json();
-      return { name: f.name, content: d.content || "" };
-    });
+      return { name, content: d.content || "" };
+    }));
 
-    const results = await Promise.all(fetches);
     const find = (name: string) => results.find(r => r.name === name)?.content || "";
 
     const sourceDocs = results
@@ -78,7 +84,7 @@ async function fetchAllFiles(): Promise<CachedFiles> {
       fetchedAt: Date.now(),
     };
 
-    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${needed.length} of ${allFiles.length} files, source docs: ${sourceDocs.length} chars)`);
+    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${entries.length} files, source docs: ${sourceDocs.length} chars)`);
     fileCache = result;
     return result;
   } catch (err) {
