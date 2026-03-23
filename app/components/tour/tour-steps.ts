@@ -51,6 +51,14 @@ export const BASE_STEPS: TourStep[] = [
     placement: "top",
   },
   {
+    id: "limitations",
+    target: "",
+    title: "What Wyle doesn\u2019t know yet",
+    content: "Wyle knows Freewyld\u2019s processes, protocols, pricing, and promises \u2014 but not everything. Right now Wyle does not have access to:\n\n\u2022 Specific client accounts or portfolios\n\u2022 Billing history or invoice details\n\u2022 Revenue data or performance metrics\n\u2022 Commission or payout information\n\u2022 Individual property or market data\n\nFor anything client-specific, check the relevant tools directly. Wyle is here to help you understand and communicate Freewyld \u2014 not to replace your client management systems.",
+    placement: "center",
+    isModal: true,
+  },
+  {
     id: "expand-info",
     target: "",
     title: "Go deeper on any response",
