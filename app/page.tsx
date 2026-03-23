@@ -7,7 +7,7 @@ type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
-interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode; draftLabel?: string }
+interface Message { role: "user" | "assistant"; content: string | ContentBlock[]; interactionMode?: InteractionMode; draftLabel?: string; mode?: ChatMode; isDivider?: boolean }
 interface PendingFile { name: string; base64: string; mediaType: string; preview: string | null; fileType: "image" | "pdf" | "text" }
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
@@ -387,6 +387,7 @@ export default function Home() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ChatMode | null>(null);
   const [confirmDeleteConv, setConfirmDeleteConv] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -550,7 +551,42 @@ export default function Home() {
   }, [modeDropdownOpen]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
-  function switchMode(mode: ChatMode) { if (mode === chatMode) { setModeDropdownOpen(false); return; } setChatMode(mode); setMessages([]); setInput(""); setPendingFiles([]); setModeDropdownOpen(false); setToast(`Switched to ${MODE_LABELS[mode]}`); }
+  function switchMode(mode: ChatMode) {
+    if (mode === chatMode) { setModeDropdownOpen(false); return; }
+    setModeDropdownOpen(false);
+    if (messages.length === 0) {
+      // No conversation yet — just switch directly
+      setChatMode(mode);
+      setToast(`Switched to ${MODE_LABELS[mode]}`);
+    } else {
+      // Show inline prompt
+      setModeSwitchPrompt(mode);
+    }
+  }
+
+  function handleModeSwitchNewChat() {
+    const newMode = modeSwitchPrompt!;
+    setModeSwitchPrompt(null);
+    setChatMode(newMode);
+    setActiveConvId(null);
+    setMessages([]);
+    setInlineExpanded({});
+    setExpandLoading({});
+    setExpandingAll({});
+    createNewChat();
+  }
+
+  function handleModeSwitchContinue() {
+    const newMode = modeSwitchPrompt!;
+    setModeSwitchPrompt(null);
+    setChatMode(newMode);
+    // Add divider message
+    setMessages(prev => [...prev, { role: "assistant" as const, content: `Switched to ${MODE_LABELS[newMode]}`, isDivider: true, mode: newMode }]);
+    // Update conversation mode in DB
+    if (activeConvId) {
+      fetch(`/api/conversations/${activeConvId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: newMode }) });
+    }
+  }
 
   function autoResizeTextarea() { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; }
 
@@ -578,7 +614,10 @@ export default function Home() {
 
     let userContent: string | ContentBlock[];
     if (pendingFiles.length > 0) { const blocks: ContentBlock[] = []; for (const f of pendingFiles) { if (f.fileType === "image") blocks.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.base64 } }); else if (f.fileType === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.base64 } }); else { const decoded = atob(f.base64); blocks.push({ type: "text", text: `--- ${f.name} ---\n${decoded}` }); } } if (text.trim()) blocks.push({ type: "text", text: text.trim() }); userContent = blocks; } else { userContent = text.trim(); }
-    const userMsg: Message = { role: "user", content: userContent }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "", interactionMode }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
+    // Dismiss mode switch prompt if typing
+    if (modeSwitchPrompt) { handleModeSwitchContinue(); }
+
+    const userMsg: Message = { role: "user", content: userContent, mode: chatMode }; const updated = [...messages, userMsg]; setMessages([...updated, { role: "assistant", content: "", interactionMode, mode: chatMode }]); setInput(""); setPendingFiles([]); if (textareaRef.current) textareaRef.current.style.height = "auto"; setStreaming(true);
 
     // Save user message
     const userTextForDb = typeof userContent === "string" ? userContent : text.trim();
@@ -596,19 +635,19 @@ export default function Home() {
         fullText += decoder.decode(value, { stream: true });
         // Only update UI if user is still viewing this conversation
         if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-          setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
+          setMessages([...updated, { role: "assistant", content: fullText, interactionMode, mode: chatMode }]);
         }
       }
       fullText = cleanResponse(fullText);
       // Final update only if still viewing
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages([...updated, { role: "assistant", content: fullText, interactionMode }]);
+        setMessages([...updated, { role: "assistant", content: fullText, interactionMode, mode: chatMode }]);
       }
       // Always save to DB regardless of which conversation is displayed
       if (thisConvId) saveMessage("assistant", fullText);
     } catch {
       if (activeConvRef.current === thisConvId || activeConvRef.current === null) {
-        setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode }]);
+        setMessages([...updated, { role: "assistant", content: "Sorry, I'm unable to respond right now. Please try again.", interactionMode, mode: chatMode }]);
       }
     } finally {
       streamingConvRef.current = null;
@@ -646,7 +685,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: contextMessages, mode: chatMode, interactionMode }),
+        body: JSON.stringify({ messages: contextMessages, mode: assistantMsg.mode || chatMode, interactionMode: assistantMsg.interactionMode || interactionMode }),
       });
       if (!res.body) throw new Error("No response body");
 
@@ -1054,6 +1093,16 @@ ${context}`;
               </div>
             )}
             {messages.map((msg, i) => {
+              // Render divider messages
+              if (msg.isDivider) {
+                return (
+                  <div key={i} className="flex items-center justify-center my-4" style={{ gap: 12 }}>
+                    <div style={{ flex: 1, height: 1, background: "rgba(22,22,22,0.08)" }} />
+                    <span style={{ fontSize: 11, color: "rgba(22,22,22,0.35)", whiteSpace: "nowrap" }}>{typeof msg.content === "string" ? msg.content : ""}</span>
+                    <div style={{ flex: 1, height: 1, background: "rgba(22,22,22,0.08)" }} />
+                  </div>
+                );
+              }
               const contentBlocks = Array.isArray(msg.content) ? msg.content : null;
               const textBlocks = contentBlocks ? contentBlocks.filter((b): b is { type: "text"; text: string } => b.type === "text") : [];
               const userText = contentBlocks ? textBlocks.filter(b => !b.text.startsWith("--- ")).map(b => b.text).join("\n") : (msg.content as string);
@@ -1081,6 +1130,24 @@ ${context}`;
                 </div>
               );
             })}
+            {/* Mode switch inline prompt */}
+            {modeSwitchPrompt && (
+              <div className="my-4 px-4 py-3" style={{ background: "rgba(22,22,22,0.03)", borderRadius: 12, border: "1px solid rgba(22,22,22,0.06)", maxWidth: 480 }}>
+                <p className="text-sm mb-3" style={{ color: "var(--color-onyx)" }}>
+                  You switched to <strong>{MODE_LABELS[modeSwitchPrompt]}</strong>. Start a new chat or continue here?
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={handleModeSwitchNewChat}
+                    style={{ borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    New Chat
+                  </button>
+                  <button onClick={handleModeSwitchContinue}
+                    style={{ borderRadius: 8, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.6)", padding: "6px 16px", fontSize: 13, cursor: "pointer" }}>
+                    Continue Here
+                  </button>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
           {/* Input area */}
