@@ -1193,13 +1193,16 @@ ${context}`;
                                 )}
                               </button>
                               {/* Hover actions */}
-                              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-0.5" style={{ background: "#161616" }}>
-                                <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameText(c.title); }} title="Rename"
-                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#9998;</button>
-                                <button onClick={(e) => { e.stopPropagation(); pinConversation(c.id, !c.pinned); }} title={c.pinned ? "Unpin" : "Pin"}
-                                  style={{ background: "none", border: "none", color: c.pinned ? "#CC8A39" : "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#x1F4CC;</button>
-                                <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteConv(c.id); }} title="Delete"
-                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.4)", cursor: "pointer", padding: 2, fontSize: 11 }}>&#x1F5D1;</button>
+                              <div className={`absolute right-2 top-1/2 -translate-y-1/2 ${c.pinned ? "flex" : "hidden group-hover:flex"}`} style={{ gap: 4, background: "#161616", borderRadius: 4, padding: "2px" }}>
+                                <button onClick={(e) => { e.stopPropagation(); setRenamingId(c.id); setRenameText(c.title); }} title="Rename" aria-label={`Rename ${c.title}`}
+                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                                  onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#9998;</button>
+                                <button onClick={(e) => { e.stopPropagation(); pinConversation(c.id, !c.pinned); }} title={c.pinned ? "Unpin" : "Pin"} aria-label={`${c.pinned ? "Unpin" : "Pin"} ${c.title}`}
+                                  style={{ background: "none", border: "none", color: c.pinned ? "#CC8A39" : "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                                  onMouseEnter={e => { if (!c.pinned) e.currentTarget.style.color = "#f8f6ee"; }} onMouseLeave={e => { if (!c.pinned) e.currentTarget.style.color = "rgba(248,246,238,0.7)"; }}>&#x1F4CC;</button>
+                                <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteConv(c.id); }} title="Delete" aria-label={`Delete ${c.title}`}
+                                  style={{ background: "none", border: "none", color: "rgba(248,246,238,0.7)", cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, borderRadius: 4 }}
+                                  onMouseEnter={e => e.currentTarget.style.color = "#ff6b6b"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.7)"}>&#x1F5D1;</button>
                               </div>
                             </div>
                           );
