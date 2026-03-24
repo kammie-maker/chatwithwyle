@@ -270,17 +270,20 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
     return cleaned;
   }
 
-  // Render content: for Sales mode, convert lines to bullet points
-  function renderContent(s: string) {
-    if (chatMode !== "sales") return s;
-    // Split into paragraphs (separated by blank lines) and render non-empty ones as bullets
-    const lines = s.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
-    if (lines.length <= 1) return s;
-    return lines.map(line => `\u2022 ${line.replace(/^[-•]\s*/, "")}`).join("\n\n");
-  }
-
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || mainText);
+
+  // Sales-specific: parse Quick Line + Bullets from SIMPLE content
+  const isSalesCard = chatMode === "sales" && !isDraft && !isRecontextualize && !isError;
+  const salesQuickLine = isSalesCard ? (() => {
+    const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
+    return parts[0] || "";
+  })() : "";
+  const salesBullets = isSalesCard ? (() => {
+    const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
+    return parts.slice(1).map(l => l.replace(/^[-•]\s*/, "").trim()).filter(Boolean);
+  })() : [];
+  const [salesRepNotesOpen, setSalesRepNotesOpen] = useState(false);
 
   // Render sections in click order (sectionOrder), not preset order
   const expandedKeys = Object.keys(inlineExpanded);
@@ -330,12 +333,72 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                 </>
               )}
               {/* SIMPLE / base content */}
-              <div className="msg-content whitespace-pre-wrap">{renderContent(simpleContent)}</div>
+              {isSalesCard && !isStreaming && salesQuickLine ? (
+                <>
+                  {/* Sales Quick Line — prominent first line */}
+                  <div style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 500, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{salesQuickLine}</div>
+                  {/* Sales Bullets — proper list */}
+                  {salesBullets.length > 0 && (
+                    <ul style={{ margin: 0, paddingLeft: 20, listStyleType: "disc" }}>
+                      {salesBullets.map((b, bi) => (
+                        <li key={bi} style={{ fontSize: 15, lineHeight: 1.5, color: "var(--color-onyx)", marginBottom: 8, paddingLeft: 4 }}>{b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <div className="msg-content whitespace-pre-wrap">{simpleContent}</div>
+              )}
               {isStreaming && (simpleContent ? <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse rounded" style={{ background: "var(--color-mustard)" }} /> : <span className="inline-flex gap-1 py-1" aria-label="Wyle is thinking" aria-busy="true"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></span>)}
             </>
           )}
 
           {!isError && <>
+          {/* Sales card layout: Rep Notes toggle + draft buttons */}
+          {isSalesCard && showPills && !isStreaming && (
+            <>
+              {/* Rep Notes: collapsible */}
+              {inlineExpanded["REP NOTES"] ? (
+                <div className="mt-3">
+                  <button onClick={() => setSalesRepNotesOpen(!salesRepNotesOpen)}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", marginBottom: salesRepNotesOpen ? 8 : 0 }}>
+                    {salesRepNotesOpen ? "\u25BE" : "\u25B8"} Rep Notes
+                  </button>
+                  {salesRepNotesOpen && (
+                    <div style={{ background: "rgba(60,59,34,0.04)", borderLeft: "3px solid rgba(60,59,34,0.15)", borderRadius: "0 6px 6px 0", padding: "10px 14px", marginTop: 4 }}>
+                      <div className="msg-content whitespace-pre-wrap" style={{ fontSize: 14, color: "rgba(22,22,22,0.65)", lineHeight: 1.6 }}>{clean(inlineExpanded["REP NOTES"])}</div>
+                    </div>
+                  )}
+                </div>
+              ) : !expandedKeys.includes("REP NOTES") && !expandLoading && (
+                <div className="mt-3">
+                  <button onClick={() => onExpand("REP NOTES")}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                    + Rep Notes
+                  </button>
+                </div>
+              )}
+              {expandLoading === "REP NOTES" && (
+                <div className="flex items-center gap-1.5 text-xs mt-3" style={{ color: "var(--color-mustard)" }}>
+                  <Spinner size={12} color="var(--color-mustard)" /> Loading Rep Notes...
+                </div>
+              )}
+              {/* Draft buttons */}
+              <div className="flex flex-wrap mt-3" style={{ gap: 8 }}>
+                {MODE_ACTIONS.sales.map(action => (
+                  <button key={action} onClick={() => onDraft(action)}
+                    style={{ borderRadius: 20, background: "#663925", border: "none", color: "#f8f6ee", padding: "6px 16px", fontSize: 14, cursor: "pointer", fontFamily: "var(--font-body)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(102,57,37,0.85)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "#663925"}>
+                    {action}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Non-sales layout: expanded sections + expand links + action buttons */}
+          {!isSalesCard && <>
           {/* Inline expanded sections — rendered in click order */}
           {renderOrder.map(k => {
             const content = inlineExpanded[k];
@@ -346,7 +409,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   {SECTION_DISPLAY[k] || k}
                 </div>
                 {content ? (
-                  <div className="msg-content whitespace-pre-wrap" style={{ marginTop: 0 }}>{renderContent(clean(content))}</div>
+                  <div className="msg-content whitespace-pre-wrap" style={{ marginTop: 0 }}>{clean(content)}</div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-mustard)" }}>
                     <Spinner size={12} color="var(--color-mustard)" />
@@ -423,6 +486,7 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               )}
             </div>
           )}
+          </>}
 
           {/* Clarify block */}
           {!isStreaming && parsed.clarify && (

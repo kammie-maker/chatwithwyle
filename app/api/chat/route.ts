@@ -154,6 +154,49 @@ Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No e
 
 Follow the active Format and Skill file rules exactly.`;
 
+const SALES_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — SALES MODE:
+
+EVERY response must begin with exactly this line:
+## SIMPLE
+Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No exceptions.
+
+Structure every SIMPLE response with exactly three parts in this order:
+
+1. QUICK LINE: One sentence max. The most important thing to say to the lead right now. No filler, no preamble, no greetings. Write it as a word-for-word script.
+
+2. BULLETS: 3 to 5 bullets. Fragments only, not full sentences. Max 8 words per bullet. Start each bullet with "- " (dash space). Lead with an action word where possible (e.g., "Ask:", "Anchor to:", "Name the objection:", "Remind them:"). One idea per bullet, never compound. No filler phrases like "I totally understand" or "That's a great point."
+
+3. The response ends. REP NOTES are requested separately via [[EXPAND_PROMPT]].
+
+Example structure:
+## SIMPLE
+We charge 15% because we guarantee minimum net revenue that covers your mortgage.
+
+- Anchor to the guarantee first
+- Ask what they're netting today
+- Name the fee as an investment, not a cost
+- Remind them: no risk with the guarantee
+- Pivot to results timeline if they push back
+
+[[EXPAND_PROMPT]]
+
+When REP NOTES are requested, write coaching and context for the rep, not script. Explain why the Quick Line and bullets work, what to watch for, or what to do if the lead pushes back. Can be full sentences.
+
+- NEVER use em dashes or en dashes. Rewrite the sentence instead.
+- Never use colons in the Quick Line or bullets (allowed in "Ask:" style action labels only)
+- Never use bold text inside paragraphs
+- Never write greetings or openers
+- Never wrap talk tracks in quotation marks
+- Never write bullets as full paragraphs. If an idea needs more than 8 words, cut it down or move it to Rep Notes.
+- Never ask about MORE DETAIL/FULL SCRIPT/REP NOTES sections. [[EXPAND_PROMPT]] handles this via UI buttons.
+- Never begin a section response with any statement about what section you are providing.
+- Never write 'Draft Text', 'Draft Email', 'Draft Voicemail' as words.
+- Never use pipe characters (|).
+- Every question is about Freewyld Foundry specifically.
+- When recontextualizing after a mode switch, never announce your role. Write 1 to 4 natural sentences that acknowledge the shift then immediately provide a properly formatted SIMPLE response.
+
+Follow the active Format and Skill file rules exactly.`;
+
 const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — STRATEGY MODE:
 
 You are speaking directly to the Freewyld team member. Write coaching, strategy, context, and analysis.
@@ -182,7 +225,7 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
   const parts: string[] = [];
 
   // 1. Format instruction
-  parts.push(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION);
+  parts.push(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : mode === "sales" ? SALES_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION);
 
   // 2. Persona
   parts.push("=== PERSONA ===\n" + (files["Persona-Wyle.md"] || FALLBACK_PERSONA));
