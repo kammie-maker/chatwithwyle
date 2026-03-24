@@ -570,6 +570,7 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [kbFilterQuery, setKbFilterQuery] = useState("");
 
   // Load user preferences on mount + handle ?tab= URL param
   useEffect(() => {
@@ -1247,9 +1248,9 @@ ${context}`;
   // ── Main app ── // force redeploy 2026-03-22
   return (
     <div className="h-screen flex" style={{ background: "var(--bg-content)" }}>
-      {/* ── LEFT ZONE — Sidebar ── */}
+      {/* ── LEFT ZONE — Chat Sidebar (hidden on KB tab) ── */}
       <nav ref={sidebarRef} aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
-        style={{ width: chatSidebarOpen ? 260 : 48, minWidth: chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden", position: "relative" }}
+        style={{ width: activeTab === "kb" ? 0 : chatSidebarOpen ? 260 : 48, minWidth: activeTab === "kb" ? 0 : chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: activeTab === "kb" ? "none" : "1px solid rgba(255,255,255,0.06)", overflow: "hidden", position: "relative" }}
         onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
         onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
         onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
@@ -1731,132 +1732,105 @@ ${context}`;
         {/* ── Knowledge Base tab ── */}
         {activeTab === "kb" && isKbUser && (
           <div className="flex-1 flex overflow-hidden">
-            {/* KB Sidebar: Source Files */}
-            <div data-tour="kb-source-files" className="shrink-0 flex flex-col sidebar-transition" style={{ width: sidebarOpen ? 280 : 40, minWidth: sidebarOpen ? 280 : 40, background: "var(--bg-sidebar)", overflow: "hidden" }}>
-              <div className="shrink-0 flex items-center justify-between px-3 py-3">
-                {sidebarOpen && <h2 className="text-sm font-semibold" style={{ color: "var(--color-cream)", fontFamily: "var(--font-heading)" }}>Source Files</h2>}
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex items-center justify-center" style={{ width: 24, height: 24, background: "transparent", border: "none", cursor: "pointer", color: "var(--color-cream)", marginLeft: sidebarOpen ? 0 : "auto", marginRight: sidebarOpen ? 0 : "auto" }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} className="w-4 h-4" style={{ transform: sidebarOpen ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                  </svg>
-                </button>
+            {/* KB Sidebar: File browser */}
+            <div data-tour="kb-source-files" className="shrink-0 flex flex-col" style={{ width: 320, minWidth: 320, background: "var(--bg-sidebar)", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+              {/* Search/filter input */}
+              <div className="shrink-0 px-3 py-3">
+                <input value={kbFilterQuery} onChange={e => setKbFilterQuery(e.target.value)} placeholder="Filter files..." aria-label="Filter KB files"
+                  className="w-full px-3 py-2 focus:outline-none"
+                  style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.12)", color: "#f8f6ee", fontSize: 13 }}
+                  onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(204,138,57,0.15)"; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "none"; }} />
               </div>
-              {sidebarOpen && (
-                <div className="flex-1 overflow-y-auto">
-                  {kbFilesLoading ? (
-                    <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-                  ) : kbFiles.length === 0 ? (
-                    <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
-                  ) : (
-                    groupKbFiles(kbFiles).map(group => {
-                      const isExpanded = expandedGroups.has(group.label);
-                      const hasSelectedFile = group.files.some(f => f.id === selectedFile?.id);
-                      return (
-                        <div key={group.label}>
-                          <button onClick={() => setExpandedGroups(prev => {
-                            const next = new Set(prev);
-                            if (next.has(group.label)) next.delete(group.label); else next.add(group.label);
-                            return next;
-                          })} className="w-full text-left" style={{ padding: "10px 16px 6px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ width: 10, height: 10, color: "rgba(237,233,225,0.4)", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                </svg>
-                                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)" }}>{group.label}</span>
-                              </div>
-                              <span style={{ fontSize: 10, color: "rgba(237,233,225,0.3)", fontWeight: 500 }}>{group.files.length}</span>
+              <div className="flex-1 overflow-y-auto">
+                {kbFilesLoading ? (
+                  <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
+                ) : kbFiles.length === 0 ? (
+                  <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
+                ) : (() => {
+                  const filterLower = kbFilterQuery.toLowerCase().trim();
+                  const filteredFiles = filterLower ? kbFiles.filter(f => f.name.toLowerCase().includes(filterLower)) : kbFiles;
+                  if (filterLower && filteredFiles.length === 0) return <p className="text-xs px-4 py-6 text-center" style={{ color: "rgba(237,233,225,0.4)" }}>No files match &ldquo;{kbFilterQuery}&rdquo;</p>;
+                  const groups = groupKbFiles(filteredFiles);
+                  return groups.map(group => {
+                    const isExpanded = expandedGroups.has(group.label) || !!filterLower;
+                    const hasSelectedFile = group.files.some(f => f.id === selectedFile?.id);
+                    return (
+                      <div key={group.label}>
+                        <button onClick={() => { if (!filterLower) setExpandedGroups(prev => { const next = new Set(prev); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; }); }}
+                          className="w-full text-left" style={{ padding: "10px 16px 6px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "transparent", border: "none", cursor: filterLower ? "default" : "pointer", display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {!filterLower && <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ width: 10, height: 10, color: "rgba(237,233,225,0.4)", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                              </svg>}
+                              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)" }}>{group.label}</span>
                             </div>
-                            {isExpanded && <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginTop: 4, paddingLeft: 16 }}>{group.description}</div>}
+                            <span style={{ fontSize: 10, color: "rgba(237,233,225,0.3)", fontWeight: 500 }}>{group.files.length}</span>
+                          </div>
+                          {isExpanded && !filterLower && <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginTop: 4, paddingLeft: 16 }}>{group.description}</div>}
+                        </button>
+                        {(isExpanded || hasSelectedFile) && group.files.map(file => (
+                          <button key={file.id} onClick={() => openFile(file)} className="w-full text-left py-2.5 transition-all"
+                            style={{ paddingLeft: 20, paddingRight: 16, background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", display: isExpanded || selectedFile?.id === file.id ? "block" : "none" }}
+                            onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                            onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
+                            <div className="text-sm font-medium truncate" style={{ color: selectedFile?.id === file.id ? "var(--color-mustard)" : "var(--color-cream)" }}>{file.name}</div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
                           </button>
-                          {(isExpanded || hasSelectedFile) && group.files.map(file => (
-                            <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-2.5 transition-all"
-                              style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", display: isExpanded || selectedFile?.id === file.id ? "block" : "none" }}
-                              onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                              onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
-                              <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
-                              <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
+                        ))}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
 
-            {/* Editor + Chat to edit — side by side */}
+            {/* KB Right Panel */}
             <div className="flex-1 flex flex-col min-w-0">
-              {/* Top bar: Update Wyle's Knowledge + Rewrite Log */}
-              <div className="shrink-0 flex items-start justify-between px-5 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Recent Rewrites</div>
-                  {logLoading ? (
-                    <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>Loading...</div>
-                  ) : logEntries.length === 0 ? (
-                    <div className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>No rewrite history</div>
-                  ) : (
-                    logEntries.slice(0, 5).map((entry, i) => (
-                      <div key={i} className="text-xs" style={{ color: "var(--text-muted)", lineHeight: "1.6" }}>
-                        {new Date(entry.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                        {" "}<span style={{ color: "rgba(22,22,22,0.3)" }}>{entry.trigger}</span>
-                      </div>
-                    ))
+              {/* Compact status bar: last rewrite + update button */}
+              <div className="shrink-0 flex items-center justify-between px-5 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {logLoading ? "Loading..." : logEntries.length === 0 ? "No rewrite history" : (
+                    <>Last rewrite: {new Date(logEntries[0].timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} <span style={{ color: "rgba(22,22,22,0.3)" }}>&middot; {logEntries[0].trigger}</span></>
                   )}
                 </div>
                 <button data-tour="kb-update-button" onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
                   className="shrink-0 disabled:opacity-50"
-                  style={{ borderRadius: 20, background: "#CC8A39", color: "#161616", border: "none", padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                  {rewriting ? <span className="flex items-center gap-2"><Spinner size={14} color="#161616" /> Updating...</span> : "Update Wyle's Knowledge"}
+                  style={{ borderRadius: 16, background: "#CC8A39", color: "#161616", border: "none", padding: "5px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                  {rewriting ? <span className="flex items-center gap-2"><Spinner size={12} color="#161616" /> Updating...</span> : "Update Wyle\u2019s Knowledge"}
                 </button>
               </div>
 
-              {/* Editor content */}
-              <div className="flex-1 flex min-w-0 overflow-hidden">
+              {/* Main content area */}
               {!selectedFile ? (
-                <div className="flex-1 flex items-center justify-center"><p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a file from the sidebar to view and edit it</p></div>
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1} style={{ width: 48, height: 48, color: "rgba(22,22,22,0.15)", margin: "0 auto 12px" }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    <p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a file to view and edit it</p>
+                  </div>
+                </div>
               ) : editorLoading ? (
                 <div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
               ) : (
-                <>
-                  {/* Left column: Chat to edit (40%) */}
-                  <div data-tour="kb-chat-to-edit" className="flex flex-col" style={{ flex: "0 0 40%", borderRight: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
-                    <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-                      <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
-                    </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-3">
-                      {editChatHistory.length === 0 && !editStreaming && <p className="text-xs text-center py-4" style={{ color: "rgba(22,22,22,0.3)" }}>Ask Claude to make changes to this file</p>}
-                      {editChatHistory.map((msg, i) => (
-                        <div key={i} className={`mb-2 ${msg.role === "user" ? "flex justify-end" : ""}`}>
-                          {msg.role === "user" ? (
-                            <div className="inline-block max-w-[85%] px-3 py-1.5 text-xs" style={{ background: "var(--color-bark)", borderRadius: "10px 10px 2px 10px", color: "var(--color-cream)" }}>{msg.text}</div>
-                          ) : (
-                            <div className="text-xs" style={{ color: "rgba(22,22,22,0.55)" }}>{msg.text}</div>
-                          )}
-                        </div>
-                      ))}
-                      {editStreaming && <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--color-mustard)" }}><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />Editing file...</div>}
-                      <div ref={editChatEndRef} />
-                    </div>
-                    <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
-                      <div className="flex gap-2">
-                        <input className="flex-1 px-3 py-2 text-xs focus:outline-none transition-all"
-                          style={{ borderRadius: "8px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)" }}
-                          onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
-                          onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
-                          placeholder="Ask Claude to update this file..." value={editChatInput} onChange={e => setEditChatInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendEditChat(); } }} disabled={editStreaming} />
-                        <button onClick={sendEditChat} disabled={editStreaming || !editChatInput.trim()} className="px-3 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
-                          style={{ borderRadius: "8px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>Send</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right column: File content (60%) */}
-                  <div data-tour="kb-file-viewer" className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)", boxShadow: "0 1px 3px rgba(22,22,22,0.08)" }}>
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* File viewer */}
+                  <div data-tour="kb-file-viewer" className="flex-1 flex flex-col min-h-0">
+                    <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
                       <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
+                      <div className="flex items-center gap-2">
+                        {!pendingDiff && !editStreaming && (
+                          <>
+                            <button onClick={cancelEdit} className="px-3 py-1 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Close</button>
+                            <button onClick={saveFile} disabled={saving || editorContent === editorOriginal} className="px-3 py-1 text-xs font-semibold disabled:opacity-40 transition-all"
+                              style={{ borderRadius: "6px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Save"}</button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     {(pendingDiff || editStreaming) && (
                       <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "rgba(60,59,34,0.06)", borderBottom: "1px solid rgba(22,22,22,0.08)" }}>
@@ -1879,22 +1853,42 @@ ${context}`;
                       <textarea value={editorContent} onChange={e => setEditorContent(e.target.value)} className="flex-1 w-full p-4 resize-none focus:outline-none"
                         style={{ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "1.6", color: "var(--color-onyx)", background: "rgba(248,246,238,0.8)", border: "none", overflow: "auto" }} spellCheck={false} />
                     )}
-                    {/* Bottom bar: Save/Cancel */}
-                    <div className="shrink-0 flex items-center justify-end gap-2 px-4 py-3 border-t" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-                      {!pendingDiff && !editStreaming && (
-                        <>
-                          <button onClick={cancelEdit} className="px-3 py-1.5 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-bark)"; e.currentTarget.style.color = "var(--color-bark)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.15)"; e.currentTarget.style.color = "rgba(22,22,22,0.5)"; }}>Cancel</button>
-                          <button onClick={saveFile} disabled={saving || editorContent === editorOriginal} className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
-                            style={{ borderRadius: "6px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>{saving ? "Saving\u2026" : "Save"}</button>
-                        </>
-                      )}
+                  </div>
+
+                  {/* Chat to Edit panel — below file viewer */}
+                  <div data-tour="kb-chat-to-edit" className="shrink-0 flex flex-col" style={{ height: 200, borderTop: "1px solid rgba(22,22,22,0.1)", background: "var(--bg-card)" }}>
+                    <div className="shrink-0 px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                      <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Chat to Edit</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-2">
+                      {editChatHistory.length === 0 && !editStreaming && <p className="text-xs text-center py-2" style={{ color: "rgba(22,22,22,0.3)" }}>Ask Claude to make changes to this file</p>}
+                      {editChatHistory.map((msg, i) => (
+                        <div key={i} className={`mb-1.5 ${msg.role === "user" ? "flex justify-end" : ""}`}>
+                          {msg.role === "user" ? (
+                            <div className="inline-block max-w-[85%] px-3 py-1.5 text-xs" style={{ background: "var(--color-bark)", borderRadius: "10px 10px 2px 10px", color: "var(--color-cream)" }}>{msg.text}</div>
+                          ) : (
+                            <div className="text-xs" style={{ color: "rgba(22,22,22,0.55)" }}>{msg.text}</div>
+                          )}
+                        </div>
+                      ))}
+                      {editStreaming && <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--color-mustard)" }}><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} />Editing file...</div>}
+                      <div ref={editChatEndRef} />
+                    </div>
+                    <div className="shrink-0 px-4 py-2 border-t" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                      <div className="flex gap-2">
+                        <input className="flex-1 px-3 py-1.5 text-xs focus:outline-none transition-all"
+                          style={{ borderRadius: "8px", background: "var(--color-cream)", border: "1px solid rgba(22,22,22,0.08)", color: "var(--color-onyx)" }}
+                          onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(204,138,57,0.12)"; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = "rgba(22,22,22,0.08)"; e.currentTarget.style.boxShadow = "none"; }}
+                          placeholder="Ask Claude to update this file..." value={editChatInput} onChange={e => setEditChatInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendEditChat(); } }} disabled={editStreaming} />
+                        <button onClick={sendEditChat} disabled={editStreaming || !editChatInput.trim()} className="px-3 py-1.5 text-xs font-semibold disabled:opacity-40 transition-all"
+                          style={{ borderRadius: "8px", background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>Send</button>
+                      </div>
                     </div>
                   </div>
-                </>
+                </div>
               )}
-              </div>
             </div>
           </div>
         )}
