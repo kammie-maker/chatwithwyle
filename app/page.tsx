@@ -270,6 +270,18 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
     return cleaned;
   }
 
+  // Render inline markdown bold (**text**) as <strong>
+  function renderBold(text: string): React.ReactNode {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    if (parts.length === 1) return text;
+    return parts.map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={i} style={{ fontWeight: 600 }}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  }
+
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || mainText);
 
@@ -366,12 +378,12 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               {isSalesCard && !isStreaming && (salesOpening || salesBullets.length > 0) ? (
                 <>
                   {/* Sales Opening Position — prominent paragraph */}
-                  {salesOpening && <div className="whitespace-pre-wrap" style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 500, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{salesOpening}</div>}
+                  {salesOpening && <div style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 400, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{renderBold(salesOpening)}</div>}
                   {/* Sales Bullets — proper list */}
                   {salesBullets.length > 0 && (
                     <ul style={{ margin: 0, paddingLeft: 20, listStyleType: "disc" }}>
                       {salesBullets.map((b, bi) => (
-                        <li key={bi} style={{ fontSize: 15, lineHeight: 1.5, color: "var(--color-onyx)", marginBottom: 8, paddingLeft: 4 }}>{b}</li>
+                        <li key={bi} style={{ fontSize: 15, lineHeight: 1.5, color: "var(--color-onyx)", marginBottom: 8, paddingLeft: 4 }}>{renderBold(b)}</li>
                       ))}
                     </ul>
                   )}
@@ -404,14 +416,14 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                         const lines = repText.split("\n");
                         const elements: React.ReactNode[] = [];
                         let currentBullets: string[] = [];
-                        const flushBullets = () => { if (currentBullets.length > 0) { elements.push(<ul key={`b${elements.length}`} style={{ margin: "2px 0 10px", paddingLeft: 18, listStyleType: "disc" }}>{currentBullets.map((b, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(22,22,22,0.6)", marginBottom: 3 }}>{b}</li>)}</ul>); currentBullets = []; } };
+                        const flushBullets = () => { if (currentBullets.length > 0) { elements.push(<ul key={`b${elements.length}`} style={{ margin: "2px 0 10px", paddingLeft: 18, listStyleType: "disc" }}>{currentBullets.map((b, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(22,22,22,0.6)", marginBottom: 3 }}>{renderBold(b)}</li>)}</ul>); currentBullets = []; } };
                         for (const line of lines) {
                           const trimmed = line.trim();
                           if (!trimmed) { flushBullets(); continue; }
                           if (trimmed.startsWith("- ")) { currentBullets.push(trimmed.substring(2)); continue; }
                           if (trimmed.endsWith(":") && trimmed.length < 40) { flushBullets(); elements.push(<div key={`l${elements.length}`} style={{ fontSize: 12, fontWeight: 600, color: "var(--color-olive)", marginTop: elements.length > 0 ? 8 : 0, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.3px" }}>{trimmed}</div>); continue; }
                           flushBullets();
-                          elements.push(<div key={`p${elements.length}`} style={{ fontSize: 13, color: "rgba(22,22,22,0.6)", lineHeight: 1.5, marginBottom: 6 }}>{trimmed}</div>);
+                          elements.push(<div key={`p${elements.length}`} style={{ fontSize: 13, color: "rgba(22,22,22,0.6)", lineHeight: 1.5, marginBottom: 6 }}>{renderBold(trimmed)}</div>);
                         }
                         flushBullets();
                         return elements;
