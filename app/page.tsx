@@ -273,16 +273,46 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || mainText);
 
-  // Sales-specific: parse Quick Line + Bullets from SIMPLE content
+  // Sales-specific: parse Opening Position + Bullets from SIMPLE content
   const isSalesCard = chatMode === "sales" && !isDraft && !isRecontextualize && !isError;
-  const salesQuickLine = isSalesCard ? (() => {
-    const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
-    return parts[0] || "";
-  })() : "";
-  const salesBullets = isSalesCard ? (() => {
-    const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
-    return parts.slice(1).map(l => l.replace(/^[-•]\s*/, "").trim()).filter(Boolean);
-  })() : [];
+  let salesOpening = "";
+  let salesBullets: string[] = [];
+  if (isSalesCard && simpleContent) {
+    // Split all lines and find where bullets start (lines starting with - or •)
+    const allLines = simpleContent.split("\n").map(l => l.trim());
+    const firstBulletIdx = allLines.findIndex(l => /^[-•]/.test(l));
+    if (firstBulletIdx > 0) {
+      salesOpening = allLines.slice(0, firstBulletIdx).filter(Boolean).join("\n");
+      // Collect bullet lines, splitting any that contain " - " as idea separators
+      const rawBullets = allLines.slice(firstBulletIdx).filter(l => l.trim());
+      for (const raw of rawBullets) {
+        const stripped = raw.replace(/^[-•]\s*/, "").trim();
+        if (!stripped) continue;
+        // Split on " - " separator within a single line (e.g., "Included: X - Included: Y")
+        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
+        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+      }
+    } else if (firstBulletIdx === 0) {
+      // All bullets, no opening
+      salesOpening = "";
+      for (const raw of allLines.filter(l => l.trim())) {
+        const stripped = raw.replace(/^[-•]\s*/, "").trim();
+        if (!stripped) continue;
+        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
+        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+      }
+    } else {
+      // No bullets found — treat first paragraph as opening, rest as bullets
+      const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
+      salesOpening = parts[0] || "";
+      for (const p of parts.slice(1)) {
+        const stripped = p.replace(/^[-•]\s*/, "").trim();
+        if (!stripped) continue;
+        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
+        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+      }
+    }
+  }
   const [salesRepNotesOpen, setSalesRepNotesOpen] = useState(false);
 
   // Render sections in click order (sectionOrder), not preset order
@@ -333,10 +363,10 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                 </>
               )}
               {/* SIMPLE / base content */}
-              {isSalesCard && !isStreaming && salesQuickLine ? (
+              {isSalesCard && !isStreaming && (salesOpening || salesBullets.length > 0) ? (
                 <>
-                  {/* Sales Quick Line — prominent first line */}
-                  <div style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 500, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{salesQuickLine}</div>
+                  {/* Sales Opening Position — prominent paragraph */}
+                  {salesOpening && <div className="whitespace-pre-wrap" style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 500, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{salesOpening}</div>}
                   {/* Sales Bullets — proper list */}
                   {salesBullets.length > 0 && (
                     <ul style={{ margin: 0, paddingLeft: 20, listStyleType: "disc" }}>
@@ -357,14 +387,17 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
           {/* Sales card layout: Rep Notes toggle + draft buttons */}
           {isSalesCard && showPills && !isStreaming && (
             <>
-              {/* Rep Notes: collapsible */}
-              {inlineExpanded["REP NOTES"] ? (
+              {/* Rep Notes: single-click toggle */}
+              {!expandLoading && (
                 <div className="mt-3">
-                  <button onClick={() => setSalesRepNotesOpen(!salesRepNotesOpen)}
-                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", marginBottom: salesRepNotesOpen ? 8 : 0 }}>
-                    {salesRepNotesOpen ? "\u25BE" : "\u25B8"} Rep Notes
+                  <button onClick={() => {
+                    if (inlineExpanded["REP NOTES"]) { setSalesRepNotesOpen(!salesRepNotesOpen); }
+                    else { onExpand("REP NOTES"); setSalesRepNotesOpen(true); }
+                  }}
+                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)", marginBottom: salesRepNotesOpen && inlineExpanded["REP NOTES"] ? 8 : 0 }}>
+                    {salesRepNotesOpen && inlineExpanded["REP NOTES"] ? "\u25BE" : "\u25B8"} Rep Notes
                   </button>
-                  {salesRepNotesOpen && (
+                  {salesRepNotesOpen && inlineExpanded["REP NOTES"] && (
                     <div style={{ background: "rgba(60,59,34,0.04)", borderLeft: "3px solid rgba(60,59,34,0.15)", borderRadius: "0 6px 6px 0", padding: "10px 14px", marginTop: 4 }}>
                       {(() => {
                         const repText = clean(inlineExpanded["REP NOTES"]);
@@ -385,13 +418,6 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                       })()}
                     </div>
                   )}
-                </div>
-              ) : !expandedKeys.includes("REP NOTES") && !expandLoading && (
-                <div className="mt-3">
-                  <button onClick={() => onExpand("REP NOTES")}
-                    style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#3c3b22", cursor: "pointer", fontFamily: "var(--font-body)" }}>
-                    + Rep Notes
-                  </button>
                 </div>
               )}
               {expandLoading === "REP NOTES" && (
