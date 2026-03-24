@@ -37,7 +37,8 @@ const ALL_FILE_IDS: Record<string, string> = {
   "SOURCE-RevenueEstimate.md": "1cCEBI9Cm4usyO-4TiBym8hGuU_L7hTDR",
 };
 
-async function fetchAllFiles(): Promise<CachedFiles> {
+// Fetch only the files needed for a specific mode (fast path)
+async function fetchFilesForMode(mode: string, userMessage: string): Promise<CachedFiles> {
   if (fileCache && Date.now() - fileCache.fetchedAt < CACHE_TTL) return fileCache.data;
 
   const t0 = Date.now();
@@ -45,8 +46,16 @@ async function fetchAllFiles(): Promise<CachedFiles> {
   const password = process.env.WYLE_PASSWORD;
   if (!webhookUrl || !password) return {};
 
+  // Determine which files this mode actually needs
+  const config = MODE_CONFIG[mode as ChatMode] || MODE_CONFIG.sales;
+  const neededFiles = new Set<string>(["Persona-Wyle.md", ...config.agents, config.format, ...config.knowledge]);
+  // Add SOURCE docs only if pricing keywords detected
+  if (PRICING_KEYWORDS.test(userMessage)) {
+    ["SOURCE-Contract.md", "SOURCE-FeeCalc.md", "SOURCE-FeeNegotiation.md", "SOURCE-Guarantee.md", "SOURCE-RevenueEstimate.md"].forEach(f => neededFiles.add(f));
+  }
+
   try {
-    const entries = Object.entries(ALL_FILE_IDS);
+    const entries = Object.entries(ALL_FILE_IDS).filter(([name]) => neededFiles.has(name));
     const results = await Promise.all(entries.map(async ([name, id]) => {
       const r = await fetch(webhookUrl, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -56,8 +65,8 @@ async function fetchAllFiles(): Promise<CachedFiles> {
       return [name, d.content || ""] as [string, string];
     }));
 
-    const data: CachedFiles = Object.fromEntries(results);
-    console.log(`[chat] All files fetched in ${Date.now() - t0}ms (${entries.length} files)`);
+    const data: CachedFiles = fileCache?.data ? { ...fileCache.data, ...Object.fromEntries(results) } : Object.fromEntries(results);
+    console.log(`[chat] Files fetched in ${Date.now() - t0}ms (${entries.length}/${Object.keys(ALL_FILE_IDS).length} files for ${mode})`);
     fileCache = { data, fetchedAt: Date.now() };
     return data;
   } catch (err) {
@@ -156,88 +165,61 @@ Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No e
 
 Follow the active Format and Skill file rules exactly.`;
 
-const SALES_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — SALES MODE:
+const SALES_FORMAT_INSTRUCTION = `FORMAT — SALES MODE:
+## SIMPLE then content then [[EXPAND_PROMPT]]. No exceptions.
 
-EVERY response must begin with exactly this line:
-## SIMPLE
-Then the response content. Then end with [[EXPAND_PROMPT]] on its own line. No exceptions.
+Two parts:
+1. OPENING: Concise paragraph with **bold on core phrase**. For multi-topic answers, use **UPPERCASE LABELS** with 1-3 bullets each.
+2. BULLETS: 3-5 bullets. One idea per line. Max 8 words. "- " prefix. Bold the action word: "- **Ask** what they net today". Never combine ideas with dashes/semicolons.
 
-Structure every SIMPLE response with exactly two parts in this order:
+REP NOTES (requested via [[EXPAND_PROMPT]]): Labeled sections (Why it works:, Watch for:, If they push back:, Next step:) with 1-3 bullets each. Bold trigger phrases. No paragraphs.
 
-1. OPENING POSITION: Orients the rep with what is happening, the goal, and the key thing to say. No filler, no preamble, no greetings. Two formats depending on content:
+Rules: No em dashes. No greetings. No colons except action labels. Bold strategically, never entire sentences. Draft emails 50-75 words max. Never reference UI buttons. Every answer is Freewyld-specific.`;
 
-   SINGLE TOPIC: When the answer has one clear point, write a concise paragraph with bold highlights on the core phrase.
+const REVENUE_MGMT_FORMAT_INSTRUCTION = `FORMAT — REVENUE MANAGEMENT MODE:
+## SIMPLE then content then [[EXPAND_PROMPT]]. No exceptions.
 
-   MULTI-TOPIC: When the answer covers multiple distinct angles (e.g., what is included vs not, pricing vs guarantee vs timeline), break into labeled subheadings. Each subheading is bold and uppercase (e.g., **WHAT IT INCLUDES**, **KEY POINT**). Under each, write 1-3 short bullets or a single sentence. This makes multi-part answers scannable on a live call.
+Write like an analyst briefing. Structure:
+1. FRAMING: 1-2 sentence framing statement. What is the situation, what does the data say, what is the recommendation.
+2. SECTIONS: Use **bold headers** for each section (e.g., **Current Strategy**, **Recommended Adjustment**, **Client Communication**). Under each, write 2-4 full sentences or data-referenced bullets. Full sentences allowed. Provide reasoning and context, not fragments.
+3. End with [[EXPAND_PROMPT]].
 
-2. BULLETS: Always 3 to 5 bullets. Each bullet is ONE idea on ONE line. Fragments only, not full sentences. Max 8 words per bullet. Start each bullet with "- " (dash space). Lead with an action word where possible (e.g., "Ask:", "Anchor to:", "Name the objection:", "Remind them:").
-   CRITICAL: Never combine multiple ideas into one bullet. Never use dashes, semicolons, commas, or slashes to join ideas within a single bullet. If you have 5 ideas, output 5 separate "- " lines. Each bullet = one idea = one line. Wrong: "- Included: X - Included: Y - Not included: Z". Right: three separate bullets, one per line. No exceptions. No filler phrases like "I totally understand" or "That's a great point."
+REP NOTES (requested via [[EXPAND_PROMPT]]): Deeper technical analysis, alternative approaches, risk factors. Full paragraphs allowed. Use **bold headers** for subsections.
 
-The response ends after the bullets. REP NOTES are requested separately via [[EXPAND_PROMPT]].
+Rules: No em dashes. No greetings. Bold section headers. Full sentences and depth encouraged. Never reference UI buttons. Every answer is Freewyld-specific.`;
 
-Example structure:
-## SIMPLE
-The fee objection usually comes from anchoring to the percentage instead of the guarantee. Lead with **the guarantee**, reframe the fee as an investment, and get them talking about what they are netting today so you can show the gap.
+const CLIENT_SUCCESS_FORMAT_INSTRUCTION = `FORMAT — CLIENT SUCCESS MODE:
+## SIMPLE then content then [[EXPAND_PROMPT]]. No exceptions.
 
-- **Anchor to** the guarantee first
-- **Ask** what they are netting today
-- **Name** the fee as an investment
-- **Remind them:** no risk with the guarantee
-- **Pivot** to results timeline if they push back
+Write conversationally but structured:
+1. DIRECT ANSWER: 1-2 sentences answering the question directly. Professional and warm tone.
+2. CONTEXT: Supporting information in short paragraphs or full-sentence bullets. Explain reasoning, reference policies, or provide background the rep needs.
+3. NEXT STEP: End with a clearly labeled section: "**Suggested Next Step:**" followed by a specific action the rep should take.
+4. End with [[EXPAND_PROMPT]].
 
-[[EXPAND_PROMPT]]
+REP NOTES (requested via [[EXPAND_PROMPT]]): Internal context, escalation paths, things to watch for. Use labeled sections with bullets.
 
-Multi-topic example:
-## SIMPLE
-**WHAT IT INCLUDES**
-- Daily pricing decisions, comp set monitoring, OTA ranking optimization
+Rules: No em dashes. No greetings. Professional warmth. Full sentences encouraged. Bold the "Suggested Next Step" label. Never reference UI buttons. Every answer is Freewyld-specific.`;
 
-**WHAT IT DOESN'T INCLUDE**
-- Guest comms, housekeeping, OTA account support
+const ONBOARDING_FORMAT_INSTRUCTION = `FORMAT — ONBOARDING MODE:
+## SIMPLE then content then [[EXPAND_PROMPT]]. No exceptions.
 
-**KEY POINT**
-- **Full pricing authority** is what makes results possible, not best-effort
+Write as a numbered checklist:
+1. Brief framing sentence if needed (what this process covers).
+2. Numbered steps in sequence. Each step starts with "N. **Action:**" where the action word is bold. Follow with a brief explanation if needed (1 sentence max).
+3. Sub-steps are indented with letters (a, b, c) under their parent step.
+4. End with [[EXPAND_PROMPT]].
 
-- **Frame** inclusions as high-value
-- **Preempt** the "what about X" question
-- **Anchor to** results requiring full control
-- **Name** what we do NOT do upfront
-- **Redirect** to the guarantee if they fixate on exclusions
+Example:
+1. **Schedule** the kickoff call within 48 hours of contract signing
+2. **Request** access to their OTA accounts
+   a. Airbnb host dashboard
+   b. VRBO owner portal
+3. **Set expectations** on the first 30 days of pricing optimization
 
-[[EXPAND_PROMPT]]
+REP NOTES (requested via [[EXPAND_PROMPT]]): Background context, common pitfalls at each step, what to say if the client pushes back. Use labeled sections with bullets.
 
-When REP NOTES are requested, format them with short labeled sections and bullet points. Use labels like "Why it works:", "Watch for:", "If they push back:", "Next step:" as appropriate to the context. Each label is followed by 1 to 3 short bullets. Never write paragraph blocks in Rep Notes. Bold specific trigger phrases or actions the rep needs to catch. Example:
-
-Why it works:
-- Guarantee reframes fee as **risk-free**
-- Netting question makes them **do the math themselves**
-
-Watch for:
-- If they keep circling back to percentage, they have **not internalized the guarantee**
-- **Silence after the netting question** is a buying signal
-
-If they push back:
-- Offer to **run their numbers together** on the call
-- Name a similar property and the results
-
-- NEVER use em dashes or en dashes. Rewrite the sentence instead.
-- Never use colons in the opening position or bullets (allowed in "Ask:" style action labels only and in Rep Notes labels)
-- USE BOLD STRATEGICALLY with **text** markdown syntax:
-  - In the opening position: bold the most important phrase or core point the rep needs at a glance. Do not bold entire sentences.
-  - In bullets: bold the action word or key concept at the start (e.g., "- **Ask:** what they are netting", "- **Anchor to** the guarantee"). If no action label, bold the most critical word.
-  - In Rep Notes: bold specific trigger phrases, objection signals, or actions the rep needs to catch quickly. Do not over-bold.
-- Never write greetings or openers
-- Never wrap talk tracks in quotation marks
-- Never write bullets as full paragraphs. If an idea needs more than 8 words, cut it down or move it to Rep Notes.
-- Never ask about MORE DETAIL/FULL SCRIPT/REP NOTES sections. [[EXPAND_PROMPT]] handles this via UI buttons.
-- Never begin a section response with any statement about what section you are providing.
-- Never write 'Draft Text', 'Draft Email', 'Draft Voicemail' as words.
-- Never use pipe characters (|).
-- Every question is about Freewyld Foundry specifically.
-- When recontextualizing after a mode switch, never announce your role. Write 1 to 4 natural sentences that acknowledge the shift then immediately provide a properly formatted SIMPLE response.
-- DRAFT EMAIL LENGTH: Drafted emails must be 50 to 75 words. Short enough to read in 30 seconds. Only exceed this limit if the situation genuinely requires more context (e.g., a complex follow-up with multiple open items). Default to short.
-
-Follow the active Format and Skill file rules exactly.`;
+Rules: No em dashes. No greetings. Bold the action word in each step. Clarity of sequence is top priority. Never reference UI buttons. Every answer is Freewyld-specific.`;
 
 const RESEARCH_FORMAT_INSTRUCTION = `CRITICAL FORMAT INSTRUCTION — STRATEGY MODE:
 
@@ -260,14 +242,20 @@ A direct 2-3 sentence answer. Speak to the rep. No scripts.
 // ── Build system prompt ──
 async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMode, userMessage: string): Promise<string> {
   const t0 = Date.now();
-  const [files, kb] = await Promise.all([fetchAllFiles(), fetchKnowledgeBase()]);
+  const [files, kb] = await Promise.all([fetchFilesForMode(mode, userMessage), fetchKnowledgeBase()]);
   const t1 = Date.now();
 
   const config = MODE_CONFIG[mode];
   const parts: string[] = [];
 
-  // 1. Format instruction
-  parts.push(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : mode === "sales" ? SALES_FORMAT_INSTRUCTION : CLIENT_FORMAT_INSTRUCTION);
+  // 1. Format instruction — per-persona
+  const FORMAT_BY_MODE: Record<string, string> = {
+    sales: SALES_FORMAT_INSTRUCTION,
+    fulfillment: REVENUE_MGMT_FORMAT_INSTRUCTION,
+    "client-success": CLIENT_SUCCESS_FORMAT_INSTRUCTION,
+    onboarding: ONBOARDING_FORMAT_INSTRUCTION,
+  };
+  parts.push(interactionMode === "research" ? RESEARCH_FORMAT_INSTRUCTION : FORMAT_BY_MODE[mode] || CLIENT_FORMAT_INSTRUCTION);
 
   // 2. Persona
   parts.push("=== PERSONA ===\n" + (files["Persona-Wyle.md"] || FALLBACK_PERSONA));
@@ -315,10 +303,11 @@ async function buildSystemPrompt(mode: ChatMode, interactionMode: InteractionMod
     console.log(`[chat] Pricing keywords detected — SOURCE docs included (${sourceParts.reduce((s, p) => s + p.length, 0)} chars)`);
   }
 
-  // 8. Supplementary KB — only if room
+  // 8. Supplementary KB — only if room (smaller allocation for Sales)
   const currentLen = parts.join("\n\n").length;
+  const kbBudget = mode === "sales" ? 5000 : 10000;
   if (kb && currentLen < 60000) {
-    const KB_MAX = Math.min(80000 - currentLen, 10000);
+    const KB_MAX = Math.min(80000 - currentLen, kbBudget);
     if (KB_MAX > 2000) {
       const kbText = kb.length > KB_MAX ? kb.slice(0, KB_MAX) + "\n[KB truncated]" : kb;
       parts.push("=== SUPPLEMENTARY KB ===\n" + kbText);
@@ -360,7 +349,7 @@ export async function POST(req: Request) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const stream = await client.messages.stream({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: validMode === "sales" ? 1024 : 2048,
       system: systemPrompt,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: (messages as any[]).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),

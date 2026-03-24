@@ -442,6 +442,40 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                     </ul>
                   )}
                 </>
+              ) : !isStreaming && chatMode === "fulfillment" && !isDraft ? (
+                /* Revenue Management: analyst report with bold headers */
+                <div>{simpleContent.split("\n").map((line, li) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return <div key={li} style={{ height: 8 }} />;
+                  if (/^\*\*[^*]+\*\*\s*$/.test(trimmed)) return <div key={li} style={{ fontSize: 14, fontWeight: 700, color: "var(--color-onyx)", marginTop: li > 0 ? 14 : 0, marginBottom: 4 }}>{trimmed.replace(/\*\*/g, "")}</div>;
+                  if (trimmed.startsWith("- ")) return <div key={li} style={{ paddingLeft: 16, fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 2 }}>{renderBold("\u2022 " + trimmed.substring(2))}</div>;
+                  return <div key={li} style={{ fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 4 }}>{renderBold(trimmed)}</div>;
+                })}</div>
+              ) : !isStreaming && chatMode === "client-success" && !isDraft ? (
+                /* Client Success: direct answer + context + next step */
+                <div>{(() => {
+                  const lines = simpleContent.split("\n");
+                  return lines.map((line, li) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return <div key={li} style={{ height: 8 }} />;
+                    if (/^\*\*Suggested Next Step:?\*\*/.test(trimmed)) return <div key={li} style={{ fontSize: 13, fontWeight: 700, color: "var(--color-olive)", marginTop: 14, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>{trimmed.replace(/\*\*/g, "")}</div>;
+                    if (/^\*\*[^*]+\*\*\s*$/.test(trimmed)) return <div key={li} style={{ fontSize: 14, fontWeight: 600, color: "var(--color-onyx)", marginTop: 10, marginBottom: 4 }}>{trimmed.replace(/\*\*/g, "")}</div>;
+                    if (trimmed.startsWith("- ")) return <div key={li} style={{ paddingLeft: 16, fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 2 }}>{renderBold("\u2022 " + trimmed.substring(2))}</div>;
+                    return <div key={li} style={{ fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 4 }}>{renderBold(trimmed)}</div>;
+                  });
+                })()}</div>
+              ) : !isStreaming && chatMode === "onboarding" && !isDraft ? (
+                /* Onboarding: numbered checklist */
+                <div>{simpleContent.split("\n").map((line, li) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return <div key={li} style={{ height: 6 }} />;
+                  const numMatch = trimmed.match(/^(\d+)\.\s+(.+)/);
+                  const subMatch = trimmed.match(/^\s*([a-z])\.\s+(.+)/);
+                  if (numMatch) return <div key={li} style={{ display: "flex", gap: 8, fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 6, marginTop: li > 0 ? 4 : 0 }}><span style={{ fontWeight: 700, color: "var(--color-olive)", minWidth: 20, flexShrink: 0 }}>{numMatch[1]}.</span><span>{renderBold(numMatch[2])}</span></div>;
+                  if (subMatch) return <div key={li} style={{ display: "flex", gap: 6, fontSize: 14, lineHeight: 1.5, color: "rgba(22,22,22,0.7)", marginBottom: 3, paddingLeft: 28 }}><span style={{ color: "rgba(22,22,22,0.4)", minWidth: 14, flexShrink: 0 }}>{subMatch[1]}.</span><span>{renderBold(subMatch[2])}</span></div>;
+                  if (trimmed.startsWith("- ")) return <div key={li} style={{ paddingLeft: 28, fontSize: 14, lineHeight: 1.5, color: "rgba(22,22,22,0.7)", marginBottom: 2 }}>{renderBold("\u2022 " + trimmed.substring(2))}</div>;
+                  return <div key={li} style={{ fontSize: 15, lineHeight: 1.6, color: "var(--color-onyx)", marginBottom: 4 }}>{renderBold(trimmed)}</div>;
+                })}</div>
               ) : (
                 <div className="msg-content whitespace-pre-wrap">{simpleContent}</div>
               )}
