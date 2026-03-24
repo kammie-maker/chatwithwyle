@@ -14,14 +14,15 @@ export async function GET(req: Request) {
 
   try {
     const { rows } = await sql`
-      SELECT id, file_name, instruction, user_email, user_name, created_at
+      SELECT id, file_name, instruction, diff_markup, user_email, user_name, created_at
       FROM kb_edit_history
       WHERE file_id = ${fileId}
       ORDER BY created_at DESC
       LIMIT 50
     `;
     return Response.json({ edits: rows });
-  } catch {
+  } catch (err) {
+    console.error("[kb-edit-history] GET error:", err);
     return Response.json({ edits: [] });
   }
 }
@@ -29,22 +30,30 @@ export async function GET(req: Request) {
 // POST — log an edit
 export async function POST(req: Request) {
   const { authorized } = await requireKbEditor();
-  if (!authorized) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorized) {
+    console.log("[kb-edit-history] POST rejected: unauthorized");
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const session = await getServerSession(getAuthOptions());
   const email = session?.user?.email?.toLowerCase() || "unknown";
   const name = session?.user?.name || email;
 
-  const { fileId, fileName, instruction } = await req.json();
-  if (!fileId || !instruction) return Response.json({ error: "fileId and instruction required" }, { status: 400 });
+  const { fileId, fileName, instruction, diffMarkup } = await req.json();
+  if (!fileId || !instruction) {
+    console.log("[kb-edit-history] POST rejected: missing fileId or instruction");
+    return Response.json({ error: "fileId and instruction required" }, { status: 400 });
+  }
 
   try {
     await sql`
-      INSERT INTO kb_edit_history (file_id, file_name, instruction, user_email, user_name)
-      VALUES (${fileId}, ${fileName || "unknown"}, ${instruction}, ${email}, ${name})
+      INSERT INTO kb_edit_history (file_id, file_name, instruction, diff_markup, user_email, user_name)
+      VALUES (${fileId}, ${fileName || "unknown"}, ${instruction}, ${diffMarkup || null}, ${email}, ${name})
     `;
+    console.log(`[kb-edit-history] Logged edit for ${fileName} by ${name}: "${instruction.substring(0, 60)}..."`);
     return Response.json({ success: true });
   } catch (err) {
+    console.error("[kb-edit-history] POST error:", err);
     return Response.json({ error: String(err) }, { status: 500 });
   }
 }

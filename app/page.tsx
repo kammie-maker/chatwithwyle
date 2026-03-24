@@ -570,10 +570,11 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [lastEditInstruction, setLastEditInstruction] = useState("");
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
-  const [editHistory, setEditHistory] = useState<{ id: string; instruction: string; user_name: string; created_at: string }[]>([]);
+  const [editHistory, setEditHistory] = useState<{ id: string; instruction: string; diff_markup: string | null; user_name: string; user_email: string; created_at: string }[]>([]);
   const [editHistoryLoading, setEditHistoryLoading] = useState(false);
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [fullLog, setFullLog] = useState<LogEntry[]>([]);
+  const logDrawerRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [kbFilterQuery, setKbFilterQuery] = useState("");
@@ -1239,7 +1240,44 @@ ${context}`;
     if (!editChatInput.trim() || editStreaming || !selectedFile) return; const instruction = editChatInput.trim(); setEditChatInput(""); setLastEditInstruction(instruction); const userMsg: EditChatMsg = { role: "user", text: instruction }; setEditChatHistory(prev => [...prev, userMsg].slice(-5)); setEditStreaming(true); setPendingDiff(null);
     try { const res = await fetch("/api/kb-file-edit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, currentContent: editorContent, instruction }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setPendingDiff(fullText); } if (fullText.includes("[[DEL]]") || fullText.includes("[[ADD]]")) { setPendingDiff(fullText); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Changes suggested. Review and Accept or Reject." }].slice(-5)); } else { setPendingDiff(null); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: fullText }].slice(-5)); } } catch { setToast("Edit failed"); setPendingDiff(null); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Failed to process edit request." }].slice(-5)); } finally { setEditStreaming(false); }
   }
-  function acceptAllChanges() { if (!pendingDiff) return; let clean = pendingDiff; clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, ""); clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1"); setEditorContent(clean); setPendingDiff(null); if (selectedFile) { setSaving(true); fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) }).then(r => r.json()).then(data => { if (data.error) setToast("Save failed"); else { setEditorOriginal(clean); setToast("Changes saved"); setConfirmRewrite(true); loadKbFiles(); if (lastEditInstruction) { fetch("/api/kb-edit-history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, instruction: lastEditInstruction }) }).catch(() => {}); } } }).catch(() => setToast("Save failed")).finally(() => setSaving(false)); } }
+  function acceptAllChanges() {
+    if (!pendingDiff) return;
+    const diffMarkup = pendingDiff; // capture before clearing
+    let clean = pendingDiff;
+    clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, "");
+    clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1");
+    setEditorContent(clean);
+    setPendingDiff(null);
+    if (selectedFile) {
+      setSaving(true);
+      fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) { setToast("Save failed"); return; }
+          setEditorOriginal(clean);
+          setToast("Changes saved");
+          setConfirmRewrite(true);
+          loadKbFiles();
+          if (lastEditInstruction) {
+            // Extract only the changed portions for a compact diff
+            const diffLines: string[] = [];
+            const delRegex = /\[\[DEL\]\]([\s\S]*?)\[\[\/DEL\]\]/g;
+            const addRegex = /\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g;
+            let m;
+            while ((m = delRegex.exec(diffMarkup)) !== null) diffLines.push(`-${m[1].trim()}`);
+            while ((m = addRegex.exec(diffMarkup)) !== null) diffLines.push(`+${m[1].trim()}`);
+            const compactDiff = diffLines.join("\n") || diffMarkup.substring(0, 2000);
+            console.log("[kb-edit-history] Logging edit:", lastEditInstruction.substring(0, 60));
+            fetch("/api/kb-edit-history", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, instruction: lastEditInstruction, diffMarkup: compactDiff })
+            }).then(r => r.json()).then(d => { if (d.error) console.error("[kb-edit-history] Error:", d.error); }).catch(err => console.error("[kb-edit-history] Failed:", err));
+          }
+        })
+        .catch(() => setToast("Save failed"))
+        .finally(() => setSaving(false));
+    }
+  }
   function rejectAllChanges() { setPendingDiff(null); setToast("Changes rejected"); }
   async function loadEditHistory(fileId: string) { setEditHistoryLoading(true); try { const res = await fetch(`/api/kb-edit-history?fileId=${encodeURIComponent(fileId)}`); const data = await res.json(); setEditHistory(data.edits || []); } catch { setEditHistory([]); } finally { setEditHistoryLoading(false); } }
   async function loadFullLog() { setLogDrawerOpen(true); try { const res = await fetch("/api/kb-log?full=1"); const data = await res.json(); setFullLog(data.rewrites || []); } catch { setFullLog([]); } }
@@ -1857,9 +1895,11 @@ ${context}`;
                       <div className="flex items-center gap-3 min-w-0">
                         <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
                         {isKbUser && <button onClick={() => { setEditHistoryOpen(!editHistoryOpen); if (!editHistoryOpen) loadEditHistory(selectedFile.id); }}
-                          className="text-xs transition-all shrink-0" style={{ color: editHistoryOpen ? "var(--color-mustard)" : "rgba(22,22,22,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                          onMouseEnter={e => e.currentTarget.style.color = "var(--color-mustard)"} onMouseLeave={e => { if (!editHistoryOpen) e.currentTarget.style.color = "rgba(22,22,22,0.35)"; }}>
-                          Edit History
+                          className="flex items-center gap-1 text-xs transition-all shrink-0" style={{ color: editHistoryOpen ? "var(--color-mustard)" : "rgba(22,22,22,0.35)", background: editHistoryOpen ? "rgba(204,138,57,0.08)" : "none", border: "none", cursor: "pointer", padding: "2px 8px", borderRadius: 4 }}
+                          onMouseEnter={e => { e.currentTarget.style.color = "var(--color-mustard)"; e.currentTarget.style.background = "rgba(204,138,57,0.08)"; }}
+                          onMouseLeave={e => { if (!editHistoryOpen) { e.currentTarget.style.color = "rgba(22,22,22,0.35)"; e.currentTarget.style.background = "none"; } }}>
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 13, height: 13 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          History
                         </button>}
                       </div>
                       <div className="flex items-center gap-2">
@@ -1874,19 +1914,42 @@ ${context}`;
                         )}
                       </div>
                     </div>
-                    {/* Edit history drawer */}
+                    {/* Edit history panel — Google Docs suggested edits style */}
                     {editHistoryOpen && isKbUser && (
-                      <div className="shrink-0 overflow-y-auto px-4 py-3" style={{ maxHeight: 200, borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(248,246,238,0.5)" }}>
-                        {editHistoryLoading ? <div className="text-xs" style={{ color: "var(--text-muted)" }}>Loading...</div> : editHistory.length === 0 ? <div className="text-xs" style={{ color: "var(--text-muted)" }}>No edit history for this file</div> : editHistory.map(edit => (
-                          <div key={edit.id} className="mb-2 pb-2" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)" }}>
-                            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                              <span style={{ fontWeight: 600, color: "var(--color-onyx)" }}>{edit.user_name}</span>
-                              <span>&middot;</span>
-                              <span>{new Date(edit.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                      <div className="shrink-0 overflow-y-auto" style={{ maxHeight: 320, borderBottom: "2px solid rgba(204,138,57,0.2)", background: "#faf9f5" }}>
+                        <div className="px-4 py-2" style={{ borderBottom: "1px solid rgba(22,22,22,0.06)" }}>
+                          <span className="text-xs font-semibold" style={{ color: "var(--color-olive)", letterSpacing: "0.5px" }}>Edit History</span>
+                        </div>
+                        <div className="px-3 py-2">
+                          {editHistoryLoading ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>Loading...</div> : editHistory.length === 0 ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>No edits recorded for this file</div> : editHistory.map(edit => (
+                            <div key={edit.id} className="mb-2" style={{ background: "white", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", overflow: "hidden" }}>
+                              {/* Card header — user + timestamp */}
+                              <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: edit.diff_markup ? "1px solid rgba(22,22,22,0.05)" : "none" }}>
+                                <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
+                                  {(edit.user_name || "?").charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-semibold truncate" style={{ color: "var(--color-onyx)" }}>{edit.user_name || edit.user_email}</span>
+                                    <span className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>&middot;</span>
+                                    <span className="text-xs shrink-0" style={{ color: "rgba(22,22,22,0.4)" }}>{new Date(edit.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                                  </div>
+                                  <div className="text-xs mt-0.5 truncate" style={{ color: "rgba(22,22,22,0.5)", fontStyle: "italic" }}>&ldquo;{edit.instruction}&rdquo;</div>
+                                </div>
+                              </div>
+                              {/* Diff view */}
+                              {edit.diff_markup && (
+                                <div className="px-3 py-2" style={{ fontSize: 12, lineHeight: 1.6, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                  {edit.diff_markup.split("\n").map((line, li) => {
+                                    if (line.startsWith("-")) return <div key={li} style={{ background: "rgba(185,28,28,0.06)", color: "#b91c1c", textDecoration: "line-through", borderRadius: 2, padding: "1px 4px", marginBottom: 2 }}>{line.substring(1)}</div>;
+                                    if (line.startsWith("+")) return <div key={li} style={{ background: "rgba(60,59,34,0.08)", color: "#3c3b22", borderRadius: 2, padding: "1px 4px", marginBottom: 2 }}>{line.substring(1)}</div>;
+                                    return null;
+                                  })}
+                                </div>
+                              )}
                             </div>
-                            <div className="text-xs mt-0.5" style={{ color: "rgba(22,22,22,0.6)" }}>&ldquo;{edit.instruction}&rdquo;</div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
                     {(pendingDiff || editStreaming) && (

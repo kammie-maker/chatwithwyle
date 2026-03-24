@@ -73,11 +73,13 @@ async function migrate() {
       file_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       instruction TEXT NOT NULL,
+      diff_markup TEXT,
       user_email TEXT NOT NULL,
       user_name TEXT,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE kb_edit_history ADD COLUMN IF NOT EXISTS diff_markup TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_kb_edit_history_file ON kb_edit_history(file_id, created_at DESC)`;
   console.log("✓ kb_edit_history table created");
 
