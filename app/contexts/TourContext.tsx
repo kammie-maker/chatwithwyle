@@ -151,12 +151,20 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const startKbTour = useCallback(() => {
     setKbTourStep(0);
     setIsKbTourActive(true);
+    fetch("/api/user/tour", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kbTourCompleted: false }) }).catch(() => {});
   }, []);
 
   const checkAndStartKbTour = useCallback(() => {
     if (kbTourChecked || isKbTourActive || isTourActive) return;
-    setKbTourChecked(true);
-    setTimeout(() => { setKbTourStep(0); setIsKbTourActive(true); }, 500);
+    // Fetch server-side flag to avoid showing tour repeatedly
+    fetch("/api/user/tour").then(r => r.json()).then(data => {
+      if (data.kbTourCompleted) {
+        setKbTourChecked(true);
+      } else {
+        setKbTourChecked(true);
+        setTimeout(() => { setKbTourStep(0); setIsKbTourActive(true); }, 500);
+      }
+    }).catch(() => { setKbTourChecked(true); });
   }, [kbTourChecked, isKbTourActive, isTourActive]);
 
   // Keyboard navigation

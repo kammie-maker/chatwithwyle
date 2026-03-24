@@ -14,7 +14,8 @@ export async function GET() {
       kbTourCompleted: rows[0]?.kb_tour_completed ?? false,
     });
   } catch {
-    return Response.json({ tourCompleted: true, kbTourCompleted: false });
+    // If query fails (e.g. column doesn't exist yet), assume tours completed to avoid repeated triggers
+    return Response.json({ tourCompleted: true, kbTourCompleted: true });
   }
 }
 

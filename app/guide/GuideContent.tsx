@@ -255,7 +255,7 @@ function MockFlywheel() {
     { x: 290, y: 80, label: "Calls Happen", color: C.bark },
     { x: 440, y: 150, label: "Transcripts Saved", color: C.olive },
     { x: 460, y: 310, label: "Pipeline Runs", color: C.mustard },
-    { x: 340, y: 420, label: "KB Updated", color: C.bark },
+    { x: 340, y: 420, label: "Knowledge Base Updated", color: C.bark },
     { x: 120, y: 330, label: "Agents + Skills", color: C.olive },
     { x: 120, y: 160, label: "Prompt Rebuilt", color: C.mustard },
   ];
@@ -465,8 +465,8 @@ export default function GuideContent({ userRole }: { userRole: string }) {
           <>
             <Accordion title="Managing the Knowledge Base" defaultOpen>
               <P>The Knowledge Base is what Wyle knows. It contains source documents, call insights, agent definitions, and skill files. You can view and edit all of it.</P>
-              <Sub label="Accessing the KB editor">Click &quot;Knowledge Base&quot; in the top navigation. Only Knowledge Managers and Admins can access this.</Sub>
-              <Sub label="Browsing files">The left sidebar lists all KB files organized by type. Click any file to view and edit its contents.</Sub>
+              <Sub label="Accessing the Knowledge Base editor">Click &quot;Knowledge Base&quot; in the top navigation. Only Knowledge Managers and Admins can access this.</Sub>
+              <Sub label="Browsing files">The left sidebar lists all knowledge base files organized by type. Click any file to view and edit its contents.</Sub>
               <Sub label="Editing a file directly">Click into the content area on the right to edit any file. Changes are saved when you click Save.</Sub>
               <Sub label="Chat-to-edit">Use the chat panel below the file content to describe changes in plain language. Wyle will suggest edits using track changes. Review and accept or reject each change.</Sub>
               <Sub label="Update Wyle's Knowledge">After making changes, click &quot;Update Wyle&apos;s Knowledge&quot; to recompile the master prompt. Wyle will have updated knowledge within 60 seconds.</Sub>
@@ -475,7 +475,7 @@ export default function GuideContent({ userRole }: { userRole: string }) {
             <Accordion title="Weekly Update Schedule" defaultOpen>
               <P>Six automated pipelines run every Monday between 1 AM and 6 AM PDT.</P>
               <ScheduleTable />
-              <P>Manual updates via the KB editor take effect immediately after clicking &quot;Update Wyle&apos;s Knowledge&quot;. No need to wait for the weekly cycle.</P>
+              <P>Manual updates via the Knowledge Base editor take effect immediately after clicking &quot;Update Wyle&apos;s Knowledge&quot;. No need to wait for the weekly cycle.</P>
             </Accordion>
 
             <Accordion title="How Wyle Learns" defaultOpen>
@@ -494,8 +494,8 @@ export default function GuideContent({ userRole }: { userRole: string }) {
             <Sub label="Roles">Three roles are available:</Sub>
             <div className="mobile-stack" style={{ display: "flex", gap: 12, marginBottom: 16 }}>
               {[
-                { label: "Admin", bg: C.olive, color: C.cream, desc: "Full access including admin panel and KB editor" },
-                { label: "Knowledge Manager", bg: C.mustard, color: C.onyx, desc: "Chat + KB editor access. Cannot manage users." },
+                { label: "Admin", bg: C.olive, color: C.cream, desc: "Full access including admin panel and Knowledge Base editor" },
+                { label: "Knowledge Manager", bg: C.mustard, color: C.onyx, desc: "Chat + Knowledge Base editor access. Cannot manage users." },
                 { label: "User", bg: "#f0ede6", color: "#555", desc: "Chat access only." },
               ].map(r => (
                 <div key={r.label} style={{ flex: "1 1 140px", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", background: "white" }}>

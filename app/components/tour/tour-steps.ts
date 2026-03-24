@@ -149,8 +149,8 @@ export const KB_ONBOARDING_STEPS: TourStep[] = [
     id: "kb-how-docs-work",
     target: "",
     title: "How these documents affect chat",
-    content: "Wyle's responses are powered by these KB files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle's answers on that topic change after the next rewrite. This is the primary way to teach Wyle new information or correct its responses.",
-    contentHtml: "Wyle\u2019s responses are powered by these KB files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle\u2019s answers on that topic change <strong>after the next rewrite</strong>. This is the primary way to teach Wyle new information or correct its responses.",
+    content: "Wyle's responses are powered by these knowledge base files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle's answers on that topic change after the next rewrite. This is the primary way to teach Wyle new information or correct its responses.",
+    contentHtml: "Wyle\u2019s responses are powered by these knowledge base files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle\u2019s answers on that topic change <strong>after the next rewrite</strong>. This is the primary way to teach Wyle new information or correct its responses.",
     placement: "center",
     isModal: true,
   },
@@ -158,15 +158,15 @@ export const KB_ONBOARDING_STEPS: TourStep[] = [
     id: "kb-schedule",
     target: "",
     title: "Weekly update schedule",
-    content: "The KB is automatically rewritten every Monday.",
-    contentHtml: `<div>The KB is automatically rewritten every Monday:</div>
+    content: "The knowledge base is automatically rewritten every Monday.",
+    contentHtml: `<div>The knowledge base is automatically rewritten every Monday:</div>
 <div style="text-align:left;margin:12px auto;max-width:280px">
 \u2022 12:00am PT \u2014 Sales Transcripts<br/>
 \u2022 1:00am PT \u2014 Podcast Sync<br/>
 \u2022 2:00am PT \u2014 InsightDocs<br/>
 \u2022 3:00am PT \u2014 Fathom Transcripts<br/>
 \u2022 4:00am PT \u2014 Agent Update<br/>
-\u2022 5:00am PT \u2014 KB Rewrite
+\u2022 5:00am PT \u2014 Knowledge Base Rewrite
 </div>
 <div style="margin-bottom:12px">Wyle\u2019s knowledge reflects the most recent completed run.</div>
 <div style="text-align:left;background:rgba(180,30,30,0.06);border:1px solid rgba(180,30,30,0.15);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5;color:#b91c1c">

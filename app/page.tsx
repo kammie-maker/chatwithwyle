@@ -712,7 +712,7 @@ export default function Home() {
   useEffect(() => { if (activeTab === "kb") { loadKbFiles(); loadLog(); checkAndStartKbTour(); } }, [activeTab]);
 
   // Tour action bridge
-  const { tourAction, clearTourAction, startTour: replayTour, checkAndStartKbTour } = useTour();
+  const { tourAction, clearTourAction, startTour: replayTour, checkAndStartKbTour, startKbTour: replayKbTour } = useTour();
   useEffect(() => {
     if (!tourAction) return;
     if (tourAction.setActiveTab) setActiveTab(tourAction.setActiveTab as Tab);
@@ -1328,10 +1328,10 @@ ${context}`;
         {/* ── Tab-specific middle content ── */}
         {activeTab === "kb" && isKbUser ? (
           <>
-            {/* KB File browser */}
+            {/* Knowledge Base file browser */}
             <div data-tour="kb-source-files" className="flex-1 flex flex-col overflow-hidden">
               <div className="shrink-0 px-3 pb-2">
-                <input value={kbFilterQuery} onChange={e => setKbFilterQuery(e.target.value)} placeholder="Filter files..." aria-label="Filter KB files"
+                <input value={kbFilterQuery} onChange={e => setKbFilterQuery(e.target.value)} placeholder="Filter files..." aria-label="Filter knowledge base files"
                   className="w-full px-3 py-2 focus:outline-none"
                   style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.12)", color: "#f8f6ee", fontSize: 13 }}
                   onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(204,138,57,0.15)"; }}
@@ -1523,6 +1523,10 @@ ${context}`;
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <span style={{ fontSize: 10 }}>&#9654;</span> Replay Tour
                   </button>
+                  {isKbUser && <button onClick={() => { setProfileMenuOpen(false); setActiveTab("kb"); setTimeout(() => replayKbTour(), 400); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "#555", background: "none", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <span style={{ fontSize: 10 }}>&#9654;</span> Replay Knowledge Base Tour
+                  </button>}
                   <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     Sign Out
@@ -1540,7 +1544,7 @@ ${context}`;
                 <div className="flex items-center gap-2">
                   <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
                   {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
-                  {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
+                  {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>Knowledge Base</span>}
                 </div>
               </div>
               <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
@@ -1798,7 +1802,7 @@ ${context}`;
         {/* ── Knowledge Base tab ── */}
         {activeTab === "kb" && isKbUser && (
           <div className="flex-1 flex overflow-hidden">
-            {/* KB Right Panel */}
+            {/* Knowledge Base right panel */}
             <div className="flex-1 flex flex-col min-w-0">
               {/* Compact status bar: clickable last rewrite + update button */}
               <div className="shrink-0 flex items-center justify-between px-5 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
