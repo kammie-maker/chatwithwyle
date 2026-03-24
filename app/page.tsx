@@ -46,19 +46,26 @@ interface KbFile { id: string; name: string; modifiedDate: string }
 
 interface KbFileGroup { label: string; description: string; files: KbFile[] }
 
+const SYSTEM_CONFIG_NAMES = new Set(["System-Assembly.md", "Persona-Wyle.md", "KB-BusinessContext.md", "KB-CaseStudies.md", "KB-FulfillmentCalls.md", "Wyle-Users.json"]);
+const LOG_NAMES_MATCH = (n: string) => n.startsWith("LOG-") || n.toLowerCase().includes("apends") || n.toLowerCase().includes("rewrite") && n.toLowerCase().includes("log");
+
 const KB_FILE_GROUPS: { label: string; description: string; match: (name: string) => boolean }[] = [
-  { label: "Agent Files", description: "Define each persona's behavior, tone, and knowledge. Auto-rewritten every Monday from the latest call transcripts and source documents.", match: n => n.startsWith("Agent-") },
+  { label: "Agent Files", description: "Define each persona's behavior, tone, and knowledge. Auto-rewritten every Monday.", match: n => n.startsWith("Agent-") },
+  { label: "Skill Files", description: "Specialized skill sets that each agent draws from when responding.", match: n => n.startsWith("Skill-") },
+  { label: "Knowledge Files", description: "Core knowledge on key topics \u2014 objections, pricing, closing, retention, and more. Rewritten weekly from source documents and call transcripts.", match: n => n.startsWith("Knowledge-") },
   { label: "Feed Files", description: "Market context and brand voice. Auto-generated from podcast syncs and market intelligence sources.", match: n => n.startsWith("FEED-") },
   { label: "Format Files", description: "Control how Wyle structures and presents its responses.", match: n => n.startsWith("Format-") },
-  { label: "KB Files", description: "Core knowledge base sourced from the Systems & Processes, Pricing, Operations, and Training folders in Google Drive.", match: n => n.startsWith("KB-") && !n.toLowerCase().includes("salescall") },
-  { label: "Sales Calls", description: "Transcripts and summaries from sales calls, processed automatically every Monday morning.", match: n => n.toLowerCase().includes("salescall") },
+  { label: "Source Documents", description: "Raw source documents copied verbatim from Google Drive. These feed the weekly rewrite pipeline.", match: n => n.startsWith("SOURCE-") },
+  { label: "Sales Calls", description: "Compiled summaries and transcripts from sales calls, processed every Monday.", match: n => n.toLowerCase().includes("sales call") || n.toLowerCase().includes("salescall") },
+  { label: "System & Config", description: "System-level files that control how Wyle assembles its prompt and manages users.", match: n => SYSTEM_CONFIG_NAMES.has(n) },
+  { label: "Logs", description: "Processing and rewrite logs. Useful for debugging or checking when files were last updated.", match: n => LOG_NAMES_MATCH(n) },
 ];
 
 function groupKbFiles(files: KbFile[]): KbFileGroup[] {
   const groups: KbFileGroup[] = [];
   const used = new Set<string>();
   for (const g of KB_FILE_GROUPS) {
-    const matched = files.filter(f => g.match(f.name));
+    const matched = files.filter(f => !used.has(f.id) && g.match(f.name));
     if (matched.length > 0) {
       groups.push({ label: g.label, description: g.description, files: matched });
       matched.forEach(f => used.add(f.id));
@@ -562,6 +569,7 @@ export default function Home() {
   const editChatEndRef = useRef<HTMLDivElement>(null);
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Load user preferences on mount + handle ?tab= URL param
   useEffect(() => {
@@ -1740,23 +1748,39 @@ ${context}`;
                   ) : kbFiles.length === 0 ? (
                     <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
                   ) : (
-                    groupKbFiles(kbFiles).map(group => (
-                      <div key={group.label}>
-                        <div style={{ padding: "12px 16px 4px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)", marginBottom: 3 }}>{group.label}</div>
-                          <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginBottom: 6 }}>{group.description}</div>
-                        </div>
-                        {group.files.map(file => (
-                          <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-2.5 transition-all"
-                            style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)" }}
-                            onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                            onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
-                            <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
-                            <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                    groupKbFiles(kbFiles).map(group => {
+                      const isExpanded = expandedGroups.has(group.label);
+                      const hasSelectedFile = group.files.some(f => f.id === selectedFile?.id);
+                      return (
+                        <div key={group.label}>
+                          <button onClick={() => setExpandedGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(group.label)) next.delete(group.label); else next.add(group.label);
+                            return next;
+                          })} className="w-full text-left" style={{ padding: "10px 16px 6px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ width: 10, height: 10, color: "rgba(237,233,225,0.4)", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                </svg>
+                                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)" }}>{group.label}</span>
+                              </div>
+                              <span style={{ fontSize: 10, color: "rgba(237,233,225,0.3)", fontWeight: 500 }}>{group.files.length}</span>
+                            </div>
+                            {isExpanded && <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginTop: 4, paddingLeft: 16 }}>{group.description}</div>}
                           </button>
-                        ))}
-                      </div>
-                    ))
+                          {(isExpanded || hasSelectedFile) && group.files.map(file => (
+                            <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-2.5 transition-all"
+                              style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", display: isExpanded || selectedFile?.id === file.id ? "block" : "none" }}
+                              onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                              onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
+                              <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
+                              <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               )}
