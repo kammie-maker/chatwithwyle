@@ -41,13 +41,14 @@ function ExpandIllustration() {
 
 // ── Always-mounted modal layer ──
 function TourModal({ visible, step, stepNum, totalSteps, onNext, onPrev, onSkip }: {
-  visible: boolean; step: { id: string; title: string; content: string } | null;
+  visible: boolean; step: { id: string; title: string; content: string; contentHtml?: string } | null;
   stepNum: number; totalSteps: number;
   onNext: () => void; onPrev: () => void; onSkip: () => void;
 }) {
   const isWelcome = step?.id === "welcome";
   const isCompletion = step?.id === "completion";
   const isExpand = step?.id === "expand-info";
+  const isSchedule = step?.id === "kb-schedule";
 
   return (
     <div style={{
@@ -60,7 +61,7 @@ function TourModal({ visible, step, stepNum, totalSteps, onNext, onPrev, onSkip 
       transition: "opacity 200ms ease, visibility 200ms ease",
     }}>
       <div style={{
-        width: isWelcome || isCompletion ? 480 : isExpand ? 460 : 400,
+        width: isWelcome || isCompletion ? 480 : isExpand || isSchedule ? 460 : 400,
         maxWidth: "calc(100vw - 32px)", background: "white", borderRadius: 16,
         padding: isWelcome || isCompletion ? "40px" : "24px 28px",
         boxShadow: "0 8px 40px rgba(0,0,0,0.3)", textAlign: "center",
@@ -70,7 +71,11 @@ function TourModal({ visible, step, stepNum, totalSteps, onNext, onPrev, onSkip 
         {(isWelcome || isCompletion) && <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><WyleAvatar /></div>}
         {isExpand && <ExpandIllustration />}
         <h2 style={{ fontSize: isWelcome || isCompletion ? 24 : 18, fontFamily: "Georgia, serif", fontWeight: 600, color: C.onyx, marginBottom: 8 }}>{step?.title}</h2>
-        <p style={{ fontSize: isWelcome ? 15 : 14, color: "#555", lineHeight: 1.7, whiteSpace: "pre-line", marginBottom: isWelcome ? 8 : 20 }}>{step?.content}</p>
+        {step?.contentHtml ? (
+          <div style={{ fontSize: isWelcome ? 15 : 14, color: "#555", lineHeight: 1.7, marginBottom: isWelcome ? 8 : 20 }} dangerouslySetInnerHTML={{ __html: step.contentHtml }} />
+        ) : (
+          <p style={{ fontSize: isWelcome ? 15 : 14, color: "#555", lineHeight: 1.7, whiteSpace: "pre-line", marginBottom: isWelcome ? 8 : 20 }}>{step?.content}</p>
+        )}
         {isWelcome && <p style={{ fontSize: 14, color: "#888", marginBottom: 24 }}>This quick tour walks you through everything you need. Takes about 2 minutes.</p>}
         {isWelcome ? (
           <>

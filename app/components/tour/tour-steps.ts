@@ -3,6 +3,7 @@ export interface TourStep {
   target: string; // data-tour selector value
   title: string;
   content: string;
+  contentHtml?: string; // rich HTML content — renders instead of plain text when present
   placement: "top" | "bottom" | "left" | "right" | "center";
   isModal?: boolean;
   beforeShow?: {
@@ -149,6 +150,7 @@ export const KB_ONBOARDING_STEPS: TourStep[] = [
     target: "",
     title: "How these documents affect chat",
     content: "Wyle's responses are powered by these KB files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle's answers on that topic change after the next rewrite. This is the primary way to teach Wyle new information or correct its responses.",
+    contentHtml: "Wyle\u2019s responses are powered by these KB files. Each file covers a specific topic \u2014 objections, pricing, onboarding, etc. When you update a file, Wyle\u2019s answers on that topic change <strong>after the next rewrite</strong>. This is the primary way to teach Wyle new information or correct its responses.",
     placement: "center",
     isModal: true,
   },
@@ -156,7 +158,20 @@ export const KB_ONBOARDING_STEPS: TourStep[] = [
     id: "kb-schedule",
     target: "",
     title: "Weekly update schedule",
-    content: "The KB is automatically rewritten every Monday:\n\n\u2022 8am UTC \u2014 Sales Transcripts\n\u2022 9am \u2014 Podcast Sync\n\u2022 10am \u2014 InsightDocs\n\u2022 11am \u2014 Fathom Transcripts\n\u2022 12pm \u2014 Agent Update\n\u2022 1pm UTC \u2014 KB Rewrite\n\nWyle's knowledge reflects the most recent completed run.",
+    content: "The KB is automatically rewritten every Monday.",
+    contentHtml: `<div>The KB is automatically rewritten every Monday:</div>
+<div style="text-align:left;margin:12px auto;max-width:280px">
+\u2022 12:00am PT \u2014 Sales Transcripts<br/>
+\u2022 1:00am PT \u2014 Podcast Sync<br/>
+\u2022 2:00am PT \u2014 InsightDocs<br/>
+\u2022 3:00am PT \u2014 Fathom Transcripts<br/>
+\u2022 4:00am PT \u2014 Agent Update<br/>
+\u2022 5:00am PT \u2014 KB Rewrite
+</div>
+<div style="margin-bottom:12px">Wyle\u2019s knowledge reflects the most recent completed run.</div>
+<div style="text-align:left;background:rgba(180,30,30,0.06);border:1px solid rgba(180,30,30,0.15);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5;color:#b91c1c">
+\u26A0\uFE0F Editing a file alone won\u2019t update Wyle\u2019s responses. You must click <strong>\u201CUpdate Wyle\u2019s Knowledge\u201D</strong> or wait for the Monday rewrite.
+</div>`,
     placement: "center",
     isModal: true,
   },
