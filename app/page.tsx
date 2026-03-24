@@ -570,8 +570,10 @@ export default function Home() {
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
   const [lastEditInstruction, setLastEditInstruction] = useState("");
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
-  const [editHistory, setEditHistory] = useState<{ id: string; instruction: string; diff_markup: string | null; user_name: string; user_email: string; created_at: string }[]>([]);
-  const [editHistoryLoading, setEditHistoryLoading] = useState(false);
+  const [fileVersions, setFileVersions] = useState<{ id: string; edit_type: string; instruction: string | null; user_name: string; user_email: string; user_role: string; created_at: string; content?: string; content_length?: number }[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [selectedVersionIdx, setSelectedVersionIdx] = useState<number | null>(null);
+  const [versionPointer, setVersionPointer] = useState(-1); // -1 = current (latest), 0+ = index into fileVersions
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [fullLog, setFullLog] = useState<LogEntry[]>([]);
   const logDrawerRef = useRef<HTMLDivElement>(null);
@@ -743,6 +745,21 @@ export default function Home() {
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
   }, [modeDropdownOpen, modeSwitchPrompt, confirmDeleteConv, confirmClearAll, forceRewriteConfirm, confirmRewrite, profileMenuOpen, mobileMenuOpen]);
+
+  // Undo/Redo keyboard shortcuts for KB editor
+  useEffect(() => {
+    if (activeTab !== "kb" || !selectedFile) return;
+    function handleUndoRedo(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "z") return;
+      // Only intercept when NOT focused on the textarea (let native undo work in textarea)
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT") return;
+      e.preventDefault();
+      if (e.shiftKey) { /* redo */ redoVersion(); } else { /* undo */ undoVersion(); }
+    }
+    document.addEventListener("keydown", handleUndoRedo);
+    return () => document.removeEventListener("keydown", handleUndoRedo);
+  }, [activeTab, selectedFile, fileVersions, versionPointer]);
 
   // Close profile menu on outside click
   useEffect(() => {
@@ -1232,8 +1249,8 @@ ${context}`;
   }
   async function loadKbFiles() { setKbFilesLoading(true); try { const res = await fetch("/api/kb-files"); const data = await res.json(); setKbFiles(data.files || []); } catch { setKbFiles([]); } finally { setKbFilesLoading(false); } }
   async function loadLog() { setLogLoading(true); try { const res = await fetch("/api/kb-log"); const data = await res.json(); setLogEntries((data.rewrites || []).slice(0, 10)); } catch { setLogEntries([]); } finally { setLogLoading(false); } }
-  async function openFile(file: KbFile) { setSelectedFile(file); setEditorLoading(true); setEditChatHistory([]); setEditChatInput(""); setPendingDiff(null); try { const res = await fetch(`/api/kb-file?fileId=${encodeURIComponent(file.id)}`); const data = await res.json(); if (data.error) throw new Error(data.error); setEditorContent(data.content || ""); setEditorOriginal(data.content || ""); } catch { setToast("Failed to load file"); setSelectedFile(null); } finally { setEditorLoading(false); } }
-  async function saveFile() { if (!selectedFile) return; setSaving(true); try { const res = await fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: editorContent }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setEditorOriginal(editorContent); setToast("File saved"); setConfirmRewrite(true); loadKbFiles(); } catch { setToast("Save failed"); } finally { setSaving(false); } }
+  async function openFile(file: KbFile) { setSelectedFile(file); setEditorLoading(true); setEditChatHistory([]); setEditChatInput(""); setPendingDiff(null); setEditHistoryOpen(false); setFileVersions([]); setSelectedVersionIdx(null); setVersionPointer(-1); try { const res = await fetch(`/api/kb-file?fileId=${encodeURIComponent(file.id)}`); const data = await res.json(); if (data.error) throw new Error(data.error); setEditorContent(data.content || ""); setEditorOriginal(data.content || ""); loadFileVersions(file.id); } catch { setToast("Failed to load file"); setSelectedFile(null); } finally { setEditorLoading(false); } }
+  async function saveFile() { if (!selectedFile) return; setSaving(true); try { const res = await fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: editorContent }) }); const data = await res.json(); if (data.error) throw new Error(data.error); await saveVersionSnapshot(selectedFile.id, selectedFile.name, editorContent, "manual"); setEditorOriginal(editorContent); setVersionPointer(-1); setToast("File saved"); setConfirmRewrite(true); loadKbFiles(); if (editHistoryOpen) loadFileVersions(selectedFile.id); } catch { setToast("Save failed"); } finally { setSaving(false); } }
   function cancelEdit() { setSelectedFile(null); setEditorContent(""); setEditorOriginal(""); setEditChatHistory([]); setEditChatInput(""); setPendingDiff(null); }
 
   async function sendEditChat() {
@@ -1242,7 +1259,6 @@ ${context}`;
   }
   function acceptAllChanges() {
     if (!pendingDiff) return;
-    const diffMarkup = pendingDiff; // capture before clearing
     let clean = pendingDiff;
     clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, "");
     clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1");
@@ -1252,34 +1268,83 @@ ${context}`;
       setSaving(true);
       fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) })
         .then(r => r.json())
-        .then(data => {
+        .then(async data => {
           if (data.error) { setToast("Save failed"); return; }
+          await saveVersionSnapshot(selectedFile.id, selectedFile.name, clean, "chat", lastEditInstruction || undefined);
           setEditorOriginal(clean);
+          setVersionPointer(-1);
           setToast("Changes saved");
           setConfirmRewrite(true);
           loadKbFiles();
-          if (lastEditInstruction) {
-            // Extract only the changed portions for a compact diff
-            const diffLines: string[] = [];
-            const delRegex = /\[\[DEL\]\]([\s\S]*?)\[\[\/DEL\]\]/g;
-            const addRegex = /\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g;
-            let m;
-            while ((m = delRegex.exec(diffMarkup)) !== null) diffLines.push(`-${m[1].trim()}`);
-            while ((m = addRegex.exec(diffMarkup)) !== null) diffLines.push(`+${m[1].trim()}`);
-            const compactDiff = diffLines.join("\n") || diffMarkup.substring(0, 2000);
-            console.log("[kb-edit-history] Logging edit:", lastEditInstruction.substring(0, 60));
-            fetch("/api/kb-edit-history", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, instruction: lastEditInstruction, diffMarkup: compactDiff })
-            }).then(r => r.json()).then(d => { if (d.error) console.error("[kb-edit-history] Error:", d.error); }).catch(err => console.error("[kb-edit-history] Failed:", err));
-          }
+          if (editHistoryOpen) loadFileVersions(selectedFile.id);
         })
         .catch(() => setToast("Save failed"))
         .finally(() => setSaving(false));
     }
   }
   function rejectAllChanges() { setPendingDiff(null); setToast("Changes rejected"); }
-  async function loadEditHistory(fileId: string) { setEditHistoryLoading(true); try { const res = await fetch(`/api/kb-edit-history?fileId=${encodeURIComponent(fileId)}`); const data = await res.json(); setEditHistory(data.edits || []); } catch { setEditHistory([]); } finally { setEditHistoryLoading(false); } }
+
+  async function saveVersionSnapshot(fileId: string, fileName: string, content: string, editType: "manual" | "chat", instruction?: string) {
+    try {
+      await fetch("/api/kb-versions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId, fileName, content, editType, instruction }) });
+    } catch (err) { console.error("[versions] Snapshot failed:", err); }
+  }
+
+  async function loadFileVersions(fileId: string) {
+    setVersionsLoading(true);
+    try {
+      const res = await fetch(`/api/kb-versions?fileId=${encodeURIComponent(fileId)}&includeContent=1`);
+      const data = await res.json();
+      setFileVersions(data.versions || []);
+    } catch { setFileVersions([]); }
+    finally { setVersionsLoading(false); }
+  }
+
+  async function restoreVersion(version: { id: string; content?: string; user_name: string }) {
+    if (!selectedFile || !version.content) return;
+    // Save current state as a snapshot first (so restore is undoable)
+    await saveVersionSnapshot(selectedFile.id, selectedFile.name, editorContent, "manual", `Restore to version by ${version.user_name}`);
+    // Apply the restored content
+    setEditorContent(version.content);
+    setEditorOriginal(version.content);
+    setSaving(true);
+    try {
+      await fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: version.content }) });
+      await saveVersionSnapshot(selectedFile.id, selectedFile.name, version.content, "manual", `Restored version from ${new Date(version.user_name).toLocaleDateString() || "earlier"}`);
+      setToast("Version restored");
+      loadKbFiles();
+      loadFileVersions(selectedFile.id);
+    } catch { setToast("Restore failed"); }
+    finally { setSaving(false); }
+  }
+
+  function undoVersion() {
+    if (!selectedFile || fileVersions.length === 0) return;
+    const nextPtr = versionPointer + 1;
+    if (nextPtr >= fileVersions.length) return;
+    const v = fileVersions[nextPtr];
+    if (v.content) { setEditorContent(v.content); setVersionPointer(nextPtr); }
+  }
+
+  function redoVersion() {
+    if (!selectedFile || versionPointer <= 0) return;
+    const nextPtr = versionPointer - 1;
+    if (nextPtr < 0) return;
+    const v = fileVersions[nextPtr];
+    if (v.content) { setEditorContent(v.content); setVersionPointer(nextPtr); }
+  }
+
+  function computeSimpleDiff(oldText: string, newText: string): { removed: string[]; added: string[] } {
+    const oldLines = oldText.split("\n");
+    const newLines = newText.split("\n");
+    const oldSet = new Set(oldLines);
+    const newSet = new Set(newLines);
+    return {
+      removed: oldLines.filter(l => !newSet.has(l) && l.trim()),
+      added: newLines.filter(l => !oldSet.has(l) && l.trim()),
+    };
+  }
+
   async function loadFullLog() { setLogDrawerOpen(true); try { const res = await fetch("/api/kb-log?full=1"); const data = await res.json(); setFullLog(data.rewrites || []); } catch { setFullLog([]); } }
   async function triggerRewrite() { setRewriting(true); setConfirmRewrite(false); setForceRewriteConfirm(false); setKbAddConfirmRewrite(false); try { const res = await fetch("/api/kb-rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "", trigger: "manual" }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setToast("Wyle's knowledge has been updated"); loadLog(); } catch { setToast("Update failed — please try again"); } finally { setRewriting(false); } }
   async function handleAddToKb() { if (!kbAddText.trim() || kbAdding) return; setKbAdding(true); try { const res = await fetch("/api/kb-update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: kbAddText.trim() }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setKbAddText(""); setToast("Added to knowledge base"); setKbAddConfirmRewrite(true); } catch { setToast("Failed to add to knowledge base"); } finally { setKbAdding(false); } }
@@ -1894,7 +1959,7 @@ ${context}`;
                     <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
                       <div className="flex items-center gap-3 min-w-0">
                         <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
-                        {isKbUser && <button onClick={() => { setEditHistoryOpen(!editHistoryOpen); if (!editHistoryOpen) loadEditHistory(selectedFile.id); }}
+                        {isKbUser && <button onClick={() => { setEditHistoryOpen(!editHistoryOpen); setSelectedVersionIdx(null); if (!editHistoryOpen) loadFileVersions(selectedFile.id); }}
                           className="flex items-center gap-1 text-xs transition-all shrink-0" style={{ color: editHistoryOpen ? "var(--color-mustard)" : "rgba(22,22,22,0.35)", background: editHistoryOpen ? "rgba(204,138,57,0.08)" : "none", border: "none", cursor: "pointer", padding: "2px 8px", borderRadius: 4 }}
                           onMouseEnter={e => { e.currentTarget.style.color = "var(--color-mustard)"; e.currentTarget.style.background = "rgba(204,138,57,0.08)"; }}
                           onMouseLeave={e => { if (!editHistoryOpen) { e.currentTarget.style.color = "rgba(22,22,22,0.35)"; e.currentTarget.style.background = "none"; } }}>
@@ -1902,7 +1967,23 @@ ${context}`;
                           History
                         </button>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {/* Undo/Redo */}
+                        {!pendingDiff && !editStreaming && fileVersions.length > 0 && (
+                          <>
+                            <button onClick={undoVersion} disabled={versionPointer >= fileVersions.length - 1} title="Undo (Cmd+Z)" aria-label="Undo"
+                              className="flex items-center justify-center disabled:opacity-20 transition-all" style={{ width: 28, height: 28, borderRadius: 4, background: "transparent", border: "none", cursor: "pointer", color: "rgba(22,22,22,0.5)" }}
+                              onMouseEnter={e => e.currentTarget.style.color = "var(--color-onyx)"} onMouseLeave={e => e.currentTarget.style.color = "rgba(22,22,22,0.5)"}>
+                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 14, height: 14 }}><path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
+                            </button>
+                            <button onClick={redoVersion} disabled={versionPointer <= 0} title="Redo (Cmd+Shift+Z)" aria-label="Redo"
+                              className="flex items-center justify-center disabled:opacity-20 transition-all" style={{ width: 28, height: 28, borderRadius: 4, background: "transparent", border: "none", cursor: "pointer", color: "rgba(22,22,22,0.5)" }}
+                              onMouseEnter={e => e.currentTarget.style.color = "var(--color-onyx)"} onMouseLeave={e => e.currentTarget.style.color = "rgba(22,22,22,0.5)"}>
+                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 14, height: 14 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" /></svg>
+                            </button>
+                            <div style={{ width: 1, height: 16, background: "rgba(22,22,22,0.1)", margin: "0 4px" }} />
+                          </>
+                        )}
                         {!pendingDiff && !editStreaming && (
                           <>
                             <button onClick={cancelEdit} className="px-3 py-1 text-xs font-semibold transition-all" style={{ borderRadius: "6px", background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
@@ -1914,41 +1995,68 @@ ${context}`;
                         )}
                       </div>
                     </div>
-                    {/* Edit history panel — Google Docs suggested edits style */}
+                    {/* Version history panel — Google Docs track changes style */}
                     {editHistoryOpen && isKbUser && (
-                      <div className="shrink-0 overflow-y-auto" style={{ maxHeight: 320, borderBottom: "2px solid rgba(204,138,57,0.2)", background: "#faf9f5" }}>
-                        <div className="px-4 py-2" style={{ borderBottom: "1px solid rgba(22,22,22,0.06)" }}>
-                          <span className="text-xs font-semibold" style={{ color: "var(--color-olive)", letterSpacing: "0.5px" }}>Edit History</span>
+                      <div className="shrink-0 overflow-y-auto" style={{ maxHeight: 360, borderBottom: "2px solid rgba(204,138,57,0.2)", background: "#faf9f5" }}>
+                        <div className="px-4 py-2 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(22,22,22,0.06)" }}>
+                          <span className="text-xs font-semibold" style={{ color: "var(--color-olive)", letterSpacing: "0.5px" }}>Version History</span>
+                          <span className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>{fileVersions.length} version{fileVersions.length !== 1 ? "s" : ""}</span>
                         </div>
                         <div className="px-3 py-2">
-                          {editHistoryLoading ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>Loading...</div> : editHistory.length === 0 ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>No edits recorded for this file</div> : editHistory.map(edit => (
-                            <div key={edit.id} className="mb-2" style={{ background: "white", borderRadius: 8, border: "1px solid rgba(22,22,22,0.08)", overflow: "hidden" }}>
-                              {/* Card header — user + timestamp */}
-                              <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: edit.diff_markup ? "1px solid rgba(22,22,22,0.05)" : "none" }}>
-                                <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
-                                  {(edit.user_name || "?").charAt(0).toUpperCase()}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold truncate" style={{ color: "var(--color-onyx)" }}>{edit.user_name || edit.user_email}</span>
-                                    <span className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>&middot;</span>
-                                    <span className="text-xs shrink-0" style={{ color: "rgba(22,22,22,0.4)" }}>{new Date(edit.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                          {versionsLoading ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>Loading...</div> : fileVersions.length === 0 ? <div className="text-xs py-4 text-center" style={{ color: "var(--text-muted)" }}>No version history yet. Save a change to create the first snapshot.</div> : fileVersions.map((ver, vi) => {
+                            const isSelected = selectedVersionIdx === vi;
+                            const prevVer = vi + 1 < fileVersions.length ? fileVersions[vi + 1] : null;
+                            const diff = isSelected && ver.content && prevVer?.content ? computeSimpleDiff(prevVer.content, ver.content) : null;
+                            return (
+                              <div key={ver.id} className="mb-2" style={{ background: isSelected ? "rgba(204,138,57,0.06)" : "white", borderRadius: 8, border: isSelected ? "1.5px solid var(--color-mustard)" : "1px solid rgba(22,22,22,0.08)", overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}
+                                onClick={() => setSelectedVersionIdx(isSelected ? null : vi)}>
+                                {/* Card header */}
+                                <div className="flex items-center gap-2 px-3 py-2">
+                                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: ver.edit_type === "chat" ? "var(--color-bark)" : "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
+                                    {(ver.user_name || "?").charAt(0).toUpperCase()}
                                   </div>
-                                  <div className="text-xs mt-0.5 truncate" style={{ color: "rgba(22,22,22,0.5)", fontStyle: "italic" }}>&ldquo;{edit.instruction}&rdquo;</div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-semibold truncate" style={{ color: "var(--color-onyx)" }}>{ver.user_name || ver.user_email}</span>
+                                      <span className="text-xs" style={{ color: "rgba(22,22,22,0.3)" }}>&middot;</span>
+                                      <span className="text-xs shrink-0" style={{ color: "rgba(22,22,22,0.4)" }}>{new Date(ver.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                                      <span className="text-xs shrink-0" style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600, background: ver.edit_type === "chat" ? "rgba(102,57,37,0.1)" : "rgba(60,59,34,0.08)", color: ver.edit_type === "chat" ? "#663925" : "#3c3b22" }}>
+                                        {ver.edit_type === "chat" ? "Chat Edit" : "Manual Edit"}
+                                      </span>
+                                    </div>
+                                    {ver.instruction && <div className="text-xs mt-0.5 truncate" style={{ color: "rgba(22,22,22,0.5)", fontStyle: "italic" }}>&ldquo;{ver.instruction}&rdquo;</div>}
+                                  </div>
                                 </div>
+                                {/* Expanded: diff + restore */}
+                                {isSelected && (
+                                  <div style={{ borderTop: "1px solid rgba(22,22,22,0.06)" }}>
+                                    {diff && (diff.removed.length > 0 || diff.added.length > 0) ? (
+                                      <div className="px-3 py-2" style={{ fontSize: 11, lineHeight: 1.6, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 120, overflowY: "auto" }}>
+                                        {diff.removed.slice(0, 10).map((line, li) => <div key={`r${li}`} style={{ background: "rgba(185,28,28,0.06)", color: "#b91c1c", textDecoration: "line-through", borderRadius: 2, padding: "1px 4px", marginBottom: 1 }}>{line}</div>)}
+                                        {diff.added.slice(0, 10).map((line, li) => <div key={`a${li}`} style={{ background: "rgba(60,59,34,0.08)", color: "#3c3b22", borderRadius: 2, padding: "1px 4px", marginBottom: 1 }}>{line}</div>)}
+                                        {(diff.removed.length > 10 || diff.added.length > 10) && <div className="text-xs mt-1" style={{ color: "rgba(22,22,22,0.3)" }}>...and more changes</div>}
+                                      </div>
+                                    ) : !prevVer ? (
+                                      <div className="px-3 py-2 text-xs" style={{ color: "rgba(22,22,22,0.4)" }}>First recorded version</div>
+                                    ) : (
+                                      <div className="px-3 py-2 text-xs" style={{ color: "rgba(22,22,22,0.4)" }}>No line-level changes detected</div>
+                                    )}
+                                    <div className="px-3 py-2 flex gap-2" style={{ borderTop: "1px solid rgba(22,22,22,0.04)" }}>
+                                      <button onClick={(e) => { e.stopPropagation(); if (ver.content) { setEditorContent(ver.content); setToast("Previewing version — save to keep"); } }}
+                                        className="text-xs px-2 py-1 transition-all" style={{ borderRadius: 4, background: "transparent", border: "1px solid rgba(22,22,22,0.12)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}
+                                        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-mustard)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(22,22,22,0.12)"}>
+                                        Preview
+                                      </button>
+                                      <button onClick={(e) => { e.stopPropagation(); restoreVersion(ver); }}
+                                        className="text-xs px-2 py-1 font-semibold transition-all" style={{ borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", border: "none", cursor: "pointer" }}>
+                                        Restore this version
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              {/* Diff view */}
-                              {edit.diff_markup && (
-                                <div className="px-3 py-2" style={{ fontSize: 12, lineHeight: 1.6, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                                  {edit.diff_markup.split("\n").map((line, li) => {
-                                    if (line.startsWith("-")) return <div key={li} style={{ background: "rgba(185,28,28,0.06)", color: "#b91c1c", textDecoration: "line-through", borderRadius: 2, padding: "1px 4px", marginBottom: 2 }}>{line.substring(1)}</div>;
-                                    if (line.startsWith("+")) return <div key={li} style={{ background: "rgba(60,59,34,0.08)", color: "#3c3b22", borderRadius: 2, padding: "1px 4px", marginBottom: 2 }}>{line.substring(1)}</div>;
-                                    return null;
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
