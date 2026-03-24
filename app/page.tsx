@@ -285,43 +285,58 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
   // Get SIMPLE content (first section or entire text)
   const simpleContent = clean(parsed.sections[0]?.content || mainText);
 
-  // Sales-specific: parse Opening Position + Bullets from SIMPLE content
+  // Sales-specific: parse Opening Position + Action Bullets from SIMPLE content
   const isSalesCard = chatMode === "sales" && !isDraft && !isRecontextualize && !isError;
   let salesOpening = "";
   let salesBullets: string[] = [];
   if (isSalesCard && simpleContent) {
-    // Split all lines and find where bullets start (lines starting with - or •)
-    const allLines = simpleContent.split("\n").map(l => l.trim());
-    const firstBulletIdx = allLines.findIndex(l => /^[-•]/.test(l));
-    if (firstBulletIdx > 0) {
-      salesOpening = allLines.slice(0, firstBulletIdx).filter(Boolean).join("\n");
-      // Collect bullet lines, splitting any that contain " - " as idea separators
-      const rawBullets = allLines.slice(firstBulletIdx).filter(l => l.trim());
-      for (const raw of rawBullets) {
-        const stripped = raw.replace(/^[-•]\s*/, "").trim();
-        if (!stripped) continue;
-        // Split on " - " separator within a single line (e.g., "Included: X - Included: Y")
-        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
-        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+    // Split into blocks (separated by blank lines)
+    const blocks = simpleContent.split(/\n\n+/).map(b => b.trim()).filter(Boolean);
+    const openingBlocks: string[] = [];
+    const bulletBlock: string[] = [];
+    let reachedActionBullets = false;
+
+    for (const block of blocks) {
+      const lines = block.split("\n").map(l => l.trim());
+      const isSubheadingBlock = /^\*\*[^*]+\*\*\s*$/.test(lines[0]);
+      const isAllBullets = lines.every(l => /^[-•]/.test(l));
+
+      if (reachedActionBullets || (isAllBullets && !isSubheadingBlock && openingBlocks.length > 0)) {
+        // Standalone bullet block after opening = action bullets
+        reachedActionBullets = true;
+        for (const line of lines) {
+          const stripped = line.replace(/^[-•]\s*/, "").trim();
+          if (!stripped) continue;
+          const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
+          if (subItems.length > 1) bulletBlock.push(...subItems); else bulletBlock.push(stripped);
+        }
+      } else {
+        // Opening content (plain text or subheading blocks with their bullets)
+        openingBlocks.push(block);
       }
-    } else if (firstBulletIdx === 0) {
-      // All bullets, no opening
-      salesOpening = "";
-      for (const raw of allLines.filter(l => l.trim())) {
-        const stripped = raw.replace(/^[-•]\s*/, "").trim();
-        if (!stripped) continue;
-        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
-        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+    }
+
+    salesOpening = openingBlocks.join("\n\n");
+    salesBullets = bulletBlock;
+
+    // Fallback: if no action bullets found but opening has content, try line-level split
+    if (salesBullets.length === 0 && salesOpening) {
+      const allLines = salesOpening.split("\n").map(l => l.trim());
+      // Find last contiguous run of bullet lines not preceded by a **LABEL**
+      let lastLabelIdx = -1;
+      for (let i = allLines.length - 1; i >= 0; i--) {
+        if (/^\*\*[^*]+\*\*\s*$/.test(allLines[i])) { lastLabelIdx = i; break; }
       }
-    } else {
-      // No bullets found — treat first paragraph as opening, rest as bullets
-      const parts = simpleContent.split(/\n\n+/).map(l => l.trim()).filter(Boolean);
-      salesOpening = parts[0] || "";
-      for (const p of parts.slice(1)) {
-        const stripped = p.replace(/^[-•]\s*/, "").trim();
-        if (!stripped) continue;
-        const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
-        if (subItems.length > 1) { salesBullets.push(...subItems); } else { salesBullets.push(stripped); }
+      const firstStandaloneBullet = allLines.findIndex((l, i) => i > lastLabelIdx && /^[-•]/.test(l) && i > 0);
+      if (firstStandaloneBullet > 0 && lastLabelIdx < firstStandaloneBullet) {
+        const openLines = allLines.slice(0, firstStandaloneBullet).filter(Boolean);
+        salesOpening = openLines.join("\n");
+        for (const raw of allLines.slice(firstStandaloneBullet)) {
+          const stripped = raw.replace(/^[-•]\s*/, "").trim();
+          if (!stripped) continue;
+          const subItems = stripped.split(/\s+[-]\s+/).map(s => s.trim()).filter(Boolean);
+          if (subItems.length > 1) salesBullets.push(...subItems); else salesBullets.push(stripped);
+        }
       }
     }
   }
@@ -377,8 +392,47 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
               {/* SIMPLE / base content */}
               {isSalesCard && !isStreaming && (salesOpening || salesBullets.length > 0) ? (
                 <>
-                  {/* Sales Opening Position — prominent paragraph */}
-                  {salesOpening && <div style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 400, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{renderBold(salesOpening)}</div>}
+                  {/* Sales Opening Position — paragraph or multi-topic with subheadings */}
+                  {salesOpening && (() => {
+                    // Detect multi-topic format: lines starting with **LABEL** pattern
+                    const hasSubheadings = /^\*\*[A-Z][^*]+\*\*\s*$/m.test(salesOpening);
+                    if (!hasSubheadings) {
+                      return <div style={{ fontSize: 17, lineHeight: 1.5, color: "var(--color-onyx)", fontWeight: 400, marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{renderBold(salesOpening)}</div>;
+                    }
+                    // Parse subheadings + their content
+                    const lines = salesOpening.split("\n");
+                    const sections: React.ReactNode[] = [];
+                    let currentLabel = "";
+                    let currentItems: string[] = [];
+                    const flushSection = () => {
+                      if (currentLabel || currentItems.length > 0) {
+                        sections.push(
+                          <div key={sections.length} style={{ marginBottom: 12 }}>
+                            {currentLabel && <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.8px", color: "var(--color-olive)", marginBottom: 4 }}>{currentLabel}</div>}
+                            {currentItems.length > 0 && (
+                              <ul style={{ margin: 0, paddingLeft: 18, listStyleType: "disc" }}>
+                                {currentItems.map((item, i) => <li key={i} style={{ fontSize: 15, lineHeight: 1.5, color: "var(--color-onyx)", marginBottom: 3 }}>{renderBold(item)}</li>)}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                        currentLabel = "";
+                        currentItems = [];
+                      }
+                    };
+                    for (const line of lines) {
+                      const trimmed = line.trim();
+                      if (!trimmed) continue;
+                      const labelMatch = trimmed.match(/^\*\*([^*]+)\*\*\s*$/);
+                      if (labelMatch) { flushSection(); currentLabel = labelMatch[1]; continue; }
+                      if (trimmed.startsWith("- ")) { currentItems.push(trimmed.substring(2).trim()); continue; }
+                      if (currentLabel && !currentItems.length) { currentItems.push(trimmed); continue; }
+                      flushSection();
+                      sections.push(<div key={sections.length} style={{ fontSize: 16, lineHeight: 1.5, color: "var(--color-onyx)", marginBottom: 8 }}>{renderBold(trimmed)}</div>);
+                    }
+                    flushSection();
+                    return <div style={{ marginBottom: salesBullets.length > 0 ? 14 : 0 }}>{sections}</div>;
+                  })()}
                   {/* Sales Bullets — proper list */}
                   {salesBullets.length > 0 && (
                     <ul style={{ margin: 0, paddingLeft: 20, listStyleType: "disc" }}>
