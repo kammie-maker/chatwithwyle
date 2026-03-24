@@ -91,6 +91,8 @@ async function fetchKnowledgeBase(): Promise<string> {
   } catch (err) { console.log(`[chat] KB fetch error: ${err}`); return kbCache?.text || ""; }
 }
 
+export const maxDuration = 120;
+
 // ── Types ──
 type ChatMode = "sales" | "client-success" | "fulfillment" | "onboarding";
 type InteractionMode = "client" | "research";
@@ -383,7 +385,13 @@ export async function POST(req: Request) {
 
     return new Response(readable, { headers: { "Content-Type": "text/plain; charset=utf-8", "Transfer-Encoding": "chunked" } });
   } catch (err) {
-    console.log(`[chat] Error at +${Date.now() - t0}ms: ${err}`);
-    return Response.json({ error: String(err) }, { status: 500 });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : "";
+    console.error(`[chat] Error at +${Date.now() - t0}ms: ${errMsg}`);
+    if (errStack) console.error(`[chat] Stack: ${errStack}`);
+    // Surface Anthropic API errors cleanly
+    const isCredits = errMsg.includes("credit balance") || errMsg.includes("billing");
+    const userMsg = isCredits ? "Wyle is temporarily unavailable. Please notify your admin that the API credits need to be replenished." : "Something went wrong. Please try again.";
+    return Response.json({ error: userMsg, detail: errMsg }, { status: 500 });
   }
 }

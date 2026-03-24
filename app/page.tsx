@@ -1029,6 +1029,7 @@ The --- divider must appear on its own line with nothing before or after it on t
       ];
 
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: contextMessages, mode: newMode, interactionMode }) });
+      if (!res.ok) throw new Error("Failed to recontextualize");
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1148,6 +1149,11 @@ The --- divider must appear on its own line with nothing before or after it on t
     let fullText = "";
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: updated, mode: chatMode, interactionMode }) });
+      if (!res.ok) {
+        let errMsg = "Something went wrong. Please try again.";
+        try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch { /* response wasn't JSON */ }
+        throw new Error(errMsg);
+      }
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1229,6 +1235,7 @@ The --- divider must appear on its own line with nothing before or after it on t
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: contextMessages, mode: assistantMsg.mode || chatMode, interactionMode: assistantMsg.interactionMode || interactionMode }),
       });
+      if (!res.ok) throw new Error("Failed to expand section");
       if (!res.body) throw new Error("No response body");
 
       const reader = res.body.getReader();
@@ -1383,6 +1390,7 @@ ${context}`;
 
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: draftMessages, mode: chatMode, interactionMode }) });
+      if (!res.ok) throw new Error("Failed to generate draft");
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
