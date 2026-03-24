@@ -366,7 +366,23 @@ function AssistantMessage({ text, msgIdx, isStreaming, chatMode, msgInteractionM
                   </button>
                   {salesRepNotesOpen && (
                     <div style={{ background: "rgba(60,59,34,0.04)", borderLeft: "3px solid rgba(60,59,34,0.15)", borderRadius: "0 6px 6px 0", padding: "10px 14px", marginTop: 4 }}>
-                      <div className="msg-content whitespace-pre-wrap" style={{ fontSize: 14, color: "rgba(22,22,22,0.65)", lineHeight: 1.6 }}>{clean(inlineExpanded["REP NOTES"])}</div>
+                      {(() => {
+                        const repText = clean(inlineExpanded["REP NOTES"]);
+                        const lines = repText.split("\n");
+                        const elements: React.ReactNode[] = [];
+                        let currentBullets: string[] = [];
+                        const flushBullets = () => { if (currentBullets.length > 0) { elements.push(<ul key={`b${elements.length}`} style={{ margin: "2px 0 10px", paddingLeft: 18, listStyleType: "disc" }}>{currentBullets.map((b, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(22,22,22,0.6)", marginBottom: 3 }}>{b}</li>)}</ul>); currentBullets = []; } };
+                        for (const line of lines) {
+                          const trimmed = line.trim();
+                          if (!trimmed) { flushBullets(); continue; }
+                          if (trimmed.startsWith("- ")) { currentBullets.push(trimmed.substring(2)); continue; }
+                          if (trimmed.endsWith(":") && trimmed.length < 40) { flushBullets(); elements.push(<div key={`l${elements.length}`} style={{ fontSize: 12, fontWeight: 600, color: "var(--color-olive)", marginTop: elements.length > 0 ? 8 : 0, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.3px" }}>{trimmed}</div>); continue; }
+                          flushBullets();
+                          elements.push(<div key={`p${elements.length}`} style={{ fontSize: 13, color: "rgba(22,22,22,0.6)", lineHeight: 1.5, marginBottom: 6 }}>{trimmed}</div>);
+                        }
+                        flushBullets();
+                        return elements;
+                      })()}
                     </div>
                   )}
                 </div>
