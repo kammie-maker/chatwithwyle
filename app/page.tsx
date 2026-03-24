@@ -52,7 +52,7 @@ const LOG_NAMES_MATCH = (n: string) => n.startsWith("LOG-") || n.toLowerCase().i
 const KB_FILE_GROUPS: { label: string; description: string; match: (name: string) => boolean }[] = [
   { label: "Agent Files", description: "Define each persona's behavior, tone, and knowledge. Auto-rewritten every Monday.", match: n => n.startsWith("Agent-") },
   { label: "Skill Files", description: "Specialized skill sets that each agent draws from when responding.", match: n => n.startsWith("Skill-") },
-  { label: "Knowledge Files", description: "Core knowledge on key topics \u2014 objections, pricing, closing, retention, and more. Rewritten weekly from source documents and call transcripts.", match: n => n.startsWith("Knowledge-") },
+  { label: "Knowledge Files", description: "Core knowledge on key topics \u2014 objections, pricing, closing, retention, and more. Rewritten weekly from source documents and call transcripts.", match: n => n.startsWith("Knowledge-") || (n.startsWith("KB-") && !SYSTEM_CONFIG_NAMES.has(n) && !n.toLowerCase().includes("salescall")) },
   { label: "Feed Files", description: "Market context and brand voice. Auto-generated from podcast syncs and market intelligence sources.", match: n => n.startsWith("FEED-") },
   { label: "Format Files", description: "Control how Wyle structures and presents its responses.", match: n => n.startsWith("Format-") },
   { label: "Source Documents", description: "Raw source documents copied verbatim from Google Drive. These feed the weekly rewrite pipeline.", match: n => n.startsWith("SOURCE-") },
