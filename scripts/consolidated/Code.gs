@@ -111,13 +111,13 @@ function handleListFiles(data) {
   if (!verifyPassword(data)) return jsonResponse({ error: "Unauthorized" });
   var folder = DriveApp.getFolderById(CONFIG.KB_OUTPUT_FOLDER);
   var masterFileId = CONFIG.MASTER_PROMPT_FILE;
-  var logName = CONFIG.REWRITE_LOG;
+  var hiddenFiles = [CONFIG.REWRITE_LOG, "LOG-Rewrites.md", "LOG-Processing.md", "Wyle Apends & Rewrites Log"];
   var files = folder.getFiles();
   var result = [];
   while (files.hasNext()) {
     var file = files.next();
     var name = file.getName();
-    if (file.getId() !== masterFileId && name !== logName) {
+    if (file.getId() !== masterFileId && hiddenFiles.indexOf(name) === -1) {
       result.push({ id: file.getId(), name: name, modifiedDate: file.getLastUpdated().toISOString() });
     }
   }

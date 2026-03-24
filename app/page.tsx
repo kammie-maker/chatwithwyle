@@ -47,7 +47,7 @@ interface KbFile { id: string; name: string; modifiedDate: string }
 interface KbFileGroup { label: string; description: string; files: KbFile[] }
 
 const SYSTEM_CONFIG_NAMES = new Set(["System-Assembly.md", "Persona-Wyle.md", "KB-BusinessContext.md", "KB-CaseStudies.md", "KB-FulfillmentCalls.md", "Wyle-Users.json"]);
-const LOG_NAMES_MATCH = (n: string) => n.startsWith("LOG-") || n.toLowerCase().includes("apends") || n.toLowerCase().includes("rewrite") && n.toLowerCase().includes("log");
+const LOG_NAMES_MATCH = (n: string) => n === "LOG.md" || n.startsWith("LOG-") || n.toLowerCase().includes("apends") || (n.toLowerCase().includes("rewrite") && n.toLowerCase().includes("log"));
 
 const KB_FILE_GROUPS: { label: string; description: string; match: (name: string) => boolean }[] = [
   { label: "Agent Files", description: "Define each persona's behavior, tone, and knowledge. Auto-rewritten every Monday.", match: n => n.startsWith("Agent-") },
@@ -568,6 +568,12 @@ export default function Home() {
   const [editStreaming, setEditStreaming] = useState(false);
   const editChatEndRef = useRef<HTMLDivElement>(null);
   const [pendingDiff, setPendingDiff] = useState<string | null>(null);
+  const [lastEditInstruction, setLastEditInstruction] = useState("");
+  const [editHistoryOpen, setEditHistoryOpen] = useState(false);
+  const [editHistory, setEditHistory] = useState<{ id: string; instruction: string; user_name: string; created_at: string }[]>([]);
+  const [editHistoryLoading, setEditHistoryLoading] = useState(false);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
+  const [fullLog, setFullLog] = useState<LogEntry[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [kbFilterQuery, setKbFilterQuery] = useState("");
@@ -1230,11 +1236,13 @@ ${context}`;
   function cancelEdit() { setSelectedFile(null); setEditorContent(""); setEditorOriginal(""); setEditChatHistory([]); setEditChatInput(""); setPendingDiff(null); }
 
   async function sendEditChat() {
-    if (!editChatInput.trim() || editStreaming || !selectedFile) return; const instruction = editChatInput.trim(); setEditChatInput(""); const userMsg: EditChatMsg = { role: "user", text: instruction }; setEditChatHistory(prev => [...prev, userMsg].slice(-5)); setEditStreaming(true); setPendingDiff(null);
+    if (!editChatInput.trim() || editStreaming || !selectedFile) return; const instruction = editChatInput.trim(); setEditChatInput(""); setLastEditInstruction(instruction); const userMsg: EditChatMsg = { role: "user", text: instruction }; setEditChatHistory(prev => [...prev, userMsg].slice(-5)); setEditStreaming(true); setPendingDiff(null);
     try { const res = await fetch("/api/kb-file-edit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, currentContent: editorContent, instruction }) }); if (!res.body) throw new Error("No response body"); const reader = res.body.getReader(); const decoder = new TextDecoder(); let fullText = ""; while (true) { const { done, value } = await reader.read(); if (done) break; fullText += decoder.decode(value, { stream: true }); setPendingDiff(fullText); } if (fullText.includes("[[DEL]]") || fullText.includes("[[ADD]]")) { setPendingDiff(fullText); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Changes suggested. Review and Accept or Reject." }].slice(-5)); } else { setPendingDiff(null); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: fullText }].slice(-5)); } } catch { setToast("Edit failed"); setPendingDiff(null); setEditChatHistory(prev => [...prev, { role: "assistant" as const, text: "Failed to process edit request." }].slice(-5)); } finally { setEditStreaming(false); }
   }
-  function acceptAllChanges() { if (!pendingDiff) return; let clean = pendingDiff; clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, ""); clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1"); setEditorContent(clean); setPendingDiff(null); if (selectedFile) { setSaving(true); fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) }).then(r => r.json()).then(data => { if (data.error) setToast("Save failed"); else { setEditorOriginal(clean); setToast("Changes saved"); setConfirmRewrite(true); loadKbFiles(); } }).catch(() => setToast("Save failed")).finally(() => setSaving(false)); } }
+  function acceptAllChanges() { if (!pendingDiff) return; let clean = pendingDiff; clean = clean.replace(/\[\[DEL\]\][\s\S]*?\[\[\/DEL\]\]/g, ""); clean = clean.replace(/\[\[ADD\]\]([\s\S]*?)\[\[\/ADD\]\]/g, "$1"); setEditorContent(clean); setPendingDiff(null); if (selectedFile) { setSaving(true); fetch("/api/kb-file", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, content: clean }) }).then(r => r.json()).then(data => { if (data.error) setToast("Save failed"); else { setEditorOriginal(clean); setToast("Changes saved"); setConfirmRewrite(true); loadKbFiles(); if (lastEditInstruction) { fetch("/api/kb-edit-history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileId: selectedFile.id, fileName: selectedFile.name, instruction: lastEditInstruction }) }).catch(() => {}); } } }).catch(() => setToast("Save failed")).finally(() => setSaving(false)); } }
   function rejectAllChanges() { setPendingDiff(null); setToast("Changes rejected"); }
+  async function loadEditHistory(fileId: string) { setEditHistoryLoading(true); try { const res = await fetch(`/api/kb-edit-history?fileId=${encodeURIComponent(fileId)}`); const data = await res.json(); setEditHistory(data.edits || []); } catch { setEditHistory([]); } finally { setEditHistoryLoading(false); } }
+  async function loadFullLog() { setLogDrawerOpen(true); try { const res = await fetch("/api/kb-log?full=1"); const data = await res.json(); setFullLog(data.rewrites || []); } catch { setFullLog([]); } }
   async function triggerRewrite() { setRewriting(true); setConfirmRewrite(false); setForceRewriteConfirm(false); setKbAddConfirmRewrite(false); try { const res = await fetch("/api/kb-rewrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "", trigger: "manual" }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setToast("Wyle's knowledge has been updated"); loadLog(); } catch { setToast("Update failed — please try again"); } finally { setRewriting(false); } }
   async function handleAddToKb() { if (!kbAddText.trim() || kbAdding) return; setKbAdding(true); try { const res = await fetch("/api/kb-update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: kbAddText.trim() }) }); const data = await res.json(); if (data.error) throw new Error(data.error); setKbAddText(""); setToast("Added to knowledge base"); setKbAddConfirmRewrite(true); } catch { setToast("Failed to add to knowledge base"); } finally { setKbAdding(false); } }
 
@@ -1248,15 +1256,15 @@ ${context}`;
   // ── Main app ── // force redeploy 2026-03-22
   return (
     <div className="h-screen flex" style={{ background: "var(--bg-content)" }}>
-      {/* ── LEFT ZONE — Chat Sidebar (hidden on KB tab) ── */}
-      <nav ref={sidebarRef} aria-label="Conversation history" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
-        style={{ width: activeTab === "kb" ? 0 : chatSidebarOpen ? 260 : 48, minWidth: activeTab === "kb" ? 0 : chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: activeTab === "kb" ? "none" : "1px solid rgba(255,255,255,0.06)", overflow: "hidden", position: "relative" }}
+      {/* ── LEFT ZONE — Sidebar ── */}
+      <nav ref={sidebarRef} aria-label="Navigation" className={`shrink-0 flex flex-col sidebar-transition ${mobileMenuOpen ? "mobile-open" : ""}`}
+        style={{ width: activeTab === "kb" ? 320 : chatSidebarOpen ? 260 : 48, minWidth: activeTab === "kb" ? 320 : chatSidebarOpen ? 260 : 48, background: "#161616", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden", position: "relative" }}
         onTouchStart={e => { touchStartX.current = e.touches[0].clientX; touchCurrentX.current = e.touches[0].clientX; }}
         onTouchMove={e => { touchCurrentX.current = e.touches[0].clientX; const delta = (touchStartX.current || 0) - e.touches[0].clientX; if (delta > 0 && sidebarRef.current) sidebarRef.current.style.transform = `translateX(${-delta}px)`; }}
         onTouchEnd={() => { const delta = (touchStartX.current || 0) - (touchCurrentX.current || 0); if (sidebarRef.current) sidebarRef.current.style.transform = ""; if (delta > 80) setMobileMenuOpen(false); touchStartX.current = null; touchCurrentX.current = null; }}>
-        {/* Sidebar header — logo + name + collapse */}
-        <div className="shrink-0 flex items-center" style={{ height: 64, padding: chatSidebarOpen ? "0 12px 0 16px" : "0", justifyContent: chatSidebarOpen ? "space-between" : "center" }}>
-          {chatSidebarOpen ? (
+        {/* ── Pinned: Sidebar header — logo + name + collapse ── */}
+        <div className="shrink-0 flex items-center" style={{ height: 64, padding: (chatSidebarOpen || activeTab === "kb") ? "0 12px 0 16px" : "0", justifyContent: (chatSidebarOpen || activeTab === "kb") ? "space-between" : "center" }}>
+          {(chatSidebarOpen || activeTab === "kb") ? (
             <>
               <div className="flex items-center" style={{ gap: 10 }}>
                 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8 }} aria-label="Wyle" role="img">
@@ -1273,11 +1281,11 @@ ${context}`;
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 18, height: 18 }}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 )}
-                <button onClick={() => setChatSidebarOpen(false)} aria-label="Collapse sidebar" className="hide-mobile"
+                {activeTab !== "kb" && <button onClick={() => setChatSidebarOpen(false)} aria-label="Collapse sidebar" className="hide-mobile"
                   style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", padding: 6, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44 }}
                   onMouseEnter={e => e.currentTarget.style.color = "#f8f6ee"} onMouseLeave={e => e.currentTarget.style.color = "rgba(248,246,238,0.5)"}>
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ width: 16, height: 16 }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                </button>
+                </button>}
               </div>
             </>
           ) : (
@@ -1291,8 +1299,8 @@ ${context}`;
           )}
         </div>
 
-        {/* Collapsed: expand button below avatar */}
-        {!chatSidebarOpen && (
+        {/* Collapsed: expand button below avatar (chat only) */}
+        {!chatSidebarOpen && activeTab !== "kb" && (
           <div className="hide-mobile" style={{ display: "flex", justifyContent: "center", padding: "4px 0" }}>
             <button onClick={() => setChatSidebarOpen(true)} aria-label="Expand sidebar"
               style={{ background: "none", border: "none", color: "rgba(248,246,238,0.5)", cursor: "pointer", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -1302,27 +1310,86 @@ ${context}`;
           </div>
         )}
 
-        {chatSidebarOpen ? (
+        {/* ── Pinned: Guide link (always visible when sidebar expanded) ── */}
+        {(chatSidebarOpen || activeTab === "kb") && (
+          <button data-tour="guide-link" onClick={() => setActiveTab("guide")}
+            style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, width: "calc(100% - 24px)",
+              background: activeTab === "guide" ? "rgba(204,138,57,0.15)" : "transparent",
+              borderLeft: activeTab === "guide" ? "2px solid #CC8A39" : "2px solid transparent",
+              color: activeTab === "guide" ? "#f8f6ee" : "rgba(248,246,238,0.6)",
+              border: "none", cursor: "pointer", fontSize: 13, fontFamily: "var(--font-body)", transition: "all 0.15s", textAlign: "left" }}
+            onMouseEnter={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#f8f6ee"; } }}
+            onMouseLeave={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(248,246,238,0.6)"; } }}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 16, height: 16, flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+            Guide
+          </button>
+        )}
+
+        {/* ── Tab-specific middle content ── */}
+        {activeTab === "kb" && isKbUser ? (
           <>
-            {/* New chat button */}
+            {/* KB File browser */}
+            <div data-tour="kb-source-files" className="flex-1 flex flex-col overflow-hidden">
+              <div className="shrink-0 px-3 pb-2">
+                <input value={kbFilterQuery} onChange={e => setKbFilterQuery(e.target.value)} placeholder="Filter files..." aria-label="Filter KB files"
+                  className="w-full px-3 py-2 focus:outline-none"
+                  style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.12)", color: "#f8f6ee", fontSize: 13 }}
+                  onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(204,138,57,0.15)"; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "none"; }} />
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {kbFilesLoading ? (
+                  <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
+                ) : kbFiles.length === 0 ? (
+                  <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
+                ) : (() => {
+                  const filterLower = kbFilterQuery.toLowerCase().trim();
+                  const filteredFiles = filterLower ? kbFiles.filter(f => f.name.toLowerCase().includes(filterLower)) : kbFiles;
+                  if (filterLower && filteredFiles.length === 0) return <p className="text-xs px-4 py-6 text-center" style={{ color: "rgba(237,233,225,0.4)" }}>No files match &ldquo;{kbFilterQuery}&rdquo;</p>;
+                  const groups = groupKbFiles(filteredFiles);
+                  return groups.map(group => {
+                    const isExpanded = expandedGroups.has(group.label) || !!filterLower;
+                    const hasSelectedFile = group.files.some(f => f.id === selectedFile?.id);
+                    return (
+                      <div key={group.label}>
+                        <button onClick={() => { if (!filterLower) setExpandedGroups(prev => { const next = new Set(prev); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; }); }}
+                          className="w-full text-left" style={{ padding: "10px 16px 6px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "transparent", border: "none", cursor: filterLower ? "default" : "pointer", display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {!filterLower && <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ width: 10, height: 10, color: "rgba(237,233,225,0.4)", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                              </svg>}
+                              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)" }}>{group.label}</span>
+                            </div>
+                            <span style={{ fontSize: 10, color: "rgba(237,233,225,0.3)", fontWeight: 500 }}>{group.files.length}</span>
+                          </div>
+                          {isExpanded && !filterLower && <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginTop: 4, paddingLeft: 16 }}>{group.description}</div>}
+                        </button>
+                        {(isExpanded || hasSelectedFile) && group.files.map(file => (
+                          <button key={file.id} onClick={() => openFile(file)} className="w-full text-left py-2.5 transition-all"
+                            style={{ paddingLeft: 20, paddingRight: 16, background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", display: isExpanded || selectedFile?.id === file.id ? "block" : "none" }}
+                            onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                            onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
+                            <div className="text-sm font-medium truncate" style={{ color: selectedFile?.id === file.id ? "var(--color-mustard)" : "var(--color-cream)" }}>{file.name}</div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </>
+        ) : chatSidebarOpen ? (
+          <>
+            {/* Chat sidebar content */}
             <div data-tour="new-chat" style={{ margin: "12px 12px 8px 12px" }}>
               <button onClick={() => { setActiveConvId(null); setMessages([]); setInlineExpanded({}); setExpandOrder({}); setMobileMenuOpen(false); }} aria-label="Start new conversation"
                 style={{ width: "100%", borderRadius: 8, background: "#CC8A39", color: "#161616", border: "none", cursor: "pointer", height: 40, fontSize: 14, fontWeight: 600, padding: "0 16px" }}>
                 + New Chat
               </button>
             </div>
-            {/* Guide link */}
-            <button data-tour="guide-link" onClick={() => setActiveTab("guide")}
-              style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 12px 8px", padding: "6px 8px", borderRadius: 6, width: "calc(100% - 24px)",
-                background: activeTab === "guide" ? "rgba(204,138,57,0.15)" : "transparent",
-                borderLeft: activeTab === "guide" ? "2px solid #CC8A39" : "2px solid transparent",
-                color: activeTab === "guide" ? "#f8f6ee" : "rgba(248,246,238,0.6)",
-                border: "none", cursor: "pointer", fontSize: 13, fontFamily: "var(--font-body)", transition: "all 0.15s", textAlign: "left" }}
-              onMouseEnter={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#f8f6ee"; } }}
-              onMouseLeave={e => { if (activeTab !== "guide") { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(248,246,238,0.6)"; } }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ width: 16, height: 16, flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-              Guide
-            </button>
             {/* Search */}
             <div className="px-3 mb-2">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." aria-label="Search conversations"
@@ -1396,73 +1463,8 @@ ${context}`;
                 ))
               )}
             </div>
-            {/* Profile row + popover */}
-            <div ref={profileMenuRef} className="shrink-0 relative" style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
-              {/* Profile popover — opens upward */}
-              {profileMenuOpen && (
-                <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
-                  {/* Preferences */}
-                  <div style={{ padding: "12px 16px" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default role</div>
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
-                        <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
-                          style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: chatMode === m ? "#CC8A39" : "rgba(22,22,22,0.06)", color: chatMode === m ? "#161616" : "var(--color-onyx)", fontWeight: chatMode === m ? 600 : 400 }}>
-                          {MODE_LABELS[m]}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default view</div>
-                    <div className="flex gap-1 mb-1">
-                      {(["client", "research"] as InteractionMode[]).map(v => (
-                        <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
-                          style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
-                          {v === "client" ? (chatMode === "sales" ? "Lead Mode" : "Client Mode") : "Strategy Mode"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }} />
-                  {/* Actions */}
-                  <div style={{ padding: "8px 0" }}>
-                    {isAdminUser && <a href="/admin" style={{ display: "block", padding: "8px 16px", fontSize: 14, color: "var(--color-olive)", textDecoration: "none" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      Admin Panel
-                    </a>}
-                    <button onClick={() => { setProfileMenuOpen(false); setConfirmClearAll(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      Clear History
-                    </button>
-                    <button onClick={() => { setProfileMenuOpen(false); replayTour(); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "#555", background: "none", border: "none", cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      <span style={{ fontSize: 10 }}>&#9654;</span> Replay Tour
-                    </button>
-                    <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
-              {/* Profile row trigger */}
-              <button data-tour="profile-row" onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
-                style={{ padding: "12px 16px", height: 56, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
-                  {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
-                    {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
-                    {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
-                  </div>
-                </div>
-                <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
-              </button>
-            </div>
           </>
-        ) : (
+        ) : !chatSidebarOpen && activeTab !== "kb" ? (
           <>
             {/* Collapsed conversation list — mode badge initials only */}
             <div className="flex-1 overflow-y-auto" style={{ padding: "4px 0" }}>
@@ -1479,14 +1481,78 @@ ${context}`;
                 );
               })}
             </div>
-            {/* Collapsed profile — just initial avatar */}
-            <div className="shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "center", padding: "10px 0" }}>
-              <button onClick={() => { setChatSidebarOpen(true); setTimeout(() => setProfileMenuOpen(true), 250); }} aria-label="Open profile"
-                style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#f8f6ee", border: "none", cursor: "pointer" }}>
-                {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
-              </button>
-            </div>
           </>
+        ) : null}
+
+        {/* ── Pinned: Profile row + popover (always visible) ── */}
+        {(chatSidebarOpen || activeTab === "kb") ? (
+          <div ref={profileMenuRef} className="shrink-0 relative" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 8 }}>
+            {profileMenuOpen && (
+              <div className="absolute bottom-full left-0 mb-2 modal-enter" style={{ background: "#fff", borderRadius: 10, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)", zIndex: 1000, width: 240, overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default role</div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {(["sales", "client-success", "fulfillment", "onboarding"] as ChatMode[]).map(m => (
+                      <button key={m} onClick={() => { setChatMode(m); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_mode: m }) }); setToast("Preference saved"); }}
+                        style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: chatMode === m ? "#CC8A39" : "rgba(22,22,22,0.06)", color: chatMode === m ? "#161616" : "var(--color-onyx)", fontWeight: chatMode === m ? 600 : 400 }}>
+                        {MODE_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", marginBottom: 8 }}>My default view</div>
+                  <div className="flex gap-1 mb-1">
+                    {(["client", "research"] as InteractionMode[]).map(v => (
+                      <button key={v} onClick={() => { setInteractionMode(v); fetch("/api/user-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_interaction: v }) }); setToast("Preference saved"); }}
+                        style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: interactionMode === v ? "#3c3b22" : "rgba(22,22,22,0.06)", color: interactionMode === v ? "#f8f6ee" : "var(--color-onyx)", fontWeight: interactionMode === v ? 600 : 400 }}>
+                        {v === "client" ? (chatMode === "sales" ? "Lead Mode" : "Client Mode") : "Strategy Mode"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ borderTop: "1px solid rgba(22,22,22,0.08)" }} />
+                <div style={{ padding: "8px 0" }}>
+                  {isAdminUser && <a href="/admin" style={{ display: "block", padding: "8px 16px", fontSize: 14, color: "var(--color-olive)", textDecoration: "none" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    Admin Panel
+                  </a>}
+                  <button onClick={() => { setProfileMenuOpen(false); setConfirmClearAll(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    Clear History
+                  </button>
+                  <button onClick={() => { setProfileMenuOpen(false); replayTour(); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "#555", background: "none", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <span style={{ fontSize: 10 }}>&#9654;</span> Replay Tour
+                  </button>
+                  <button onClick={() => signOut()} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", fontSize: 14, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+            <button data-tour="profile-row" onClick={() => setProfileMenuOpen(!profileMenuOpen)} className="w-full flex items-center gap-3 transition-all"
+              style={{ padding: "10px 16px", height: 52, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#f8f6ee", flexShrink: 0 }}>
+                {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate" style={{ color: "#f8f6ee", fontSize: 15, fontWeight: 500 }}>{session?.user?.name || session?.user?.email || ""}</span>
+                  {userRole === "admin" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-olive)", color: "#f8f6ee", fontWeight: 600, flexShrink: 0 }}>Admin</span>}
+                  {userRole === "knowledge_manager" && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--color-mustard)", color: "var(--color-onyx)", fontWeight: 600, flexShrink: 0 }}>KB</span>}
+                </div>
+              </div>
+              <span style={{ color: "rgba(248,246,238,0.4)", fontSize: 18 }}>&rsaquo;</span>
+            </button>
+          </div>
+        ) : (
+          <div className="shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "center", padding: "10px 0" }}>
+            <button onClick={() => { setChatSidebarOpen(true); setTimeout(() => setProfileMenuOpen(true), 250); }} aria-label="Open profile"
+              style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-olive)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#f8f6ee", border: "none", cursor: "pointer" }}>
+              {session?.user?.name?.charAt(0)?.toUpperCase() || "?"}
+            </button>
+          </div>
         )}
       </nav>
 
@@ -1732,69 +1798,16 @@ ${context}`;
         {/* ── Knowledge Base tab ── */}
         {activeTab === "kb" && isKbUser && (
           <div className="flex-1 flex overflow-hidden">
-            {/* KB Sidebar: File browser */}
-            <div data-tour="kb-source-files" className="shrink-0 flex flex-col" style={{ width: 320, minWidth: 320, background: "var(--bg-sidebar)", borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
-              {/* Search/filter input */}
-              <div className="shrink-0 px-3 py-3">
-                <input value={kbFilterQuery} onChange={e => setKbFilterQuery(e.target.value)} placeholder="Filter files..." aria-label="Filter KB files"
-                  className="w-full px-3 py-2 focus:outline-none"
-                  style={{ borderRadius: 6, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.12)", color: "#f8f6ee", fontSize: 13 }}
-                  onFocus={e => { e.currentTarget.style.borderColor = "var(--color-mustard)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(204,138,57,0.15)"; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "none"; }} />
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                {kbFilesLoading ? (
-                  <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--color-mustard)", borderTopColor: "transparent" }} /></div>
-                ) : kbFiles.length === 0 ? (
-                  <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
-                ) : (() => {
-                  const filterLower = kbFilterQuery.toLowerCase().trim();
-                  const filteredFiles = filterLower ? kbFiles.filter(f => f.name.toLowerCase().includes(filterLower)) : kbFiles;
-                  if (filterLower && filteredFiles.length === 0) return <p className="text-xs px-4 py-6 text-center" style={{ color: "rgba(237,233,225,0.4)" }}>No files match &ldquo;{kbFilterQuery}&rdquo;</p>;
-                  const groups = groupKbFiles(filteredFiles);
-                  return groups.map(group => {
-                    const isExpanded = expandedGroups.has(group.label) || !!filterLower;
-                    const hasSelectedFile = group.files.some(f => f.id === selectedFile?.id);
-                    return (
-                      <div key={group.label}>
-                        <button onClick={() => { if (!filterLower) setExpandedGroups(prev => { const next = new Set(prev); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; }); }}
-                          className="w-full text-left" style={{ padding: "10px 16px 6px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "transparent", border: "none", cursor: filterLower ? "default" : "pointer", display: "flex", flexDirection: "column" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {!filterLower && <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ width: 10, height: 10, color: "rgba(237,233,225,0.4)", transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                              </svg>}
-                              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)" }}>{group.label}</span>
-                            </div>
-                            <span style={{ fontSize: 10, color: "rgba(237,233,225,0.3)", fontWeight: 500 }}>{group.files.length}</span>
-                          </div>
-                          {isExpanded && !filterLower && <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginTop: 4, paddingLeft: 16 }}>{group.description}</div>}
-                        </button>
-                        {(isExpanded || hasSelectedFile) && group.files.map(file => (
-                          <button key={file.id} onClick={() => openFile(file)} className="w-full text-left py-2.5 transition-all"
-                            style={{ paddingLeft: 20, paddingRight: 16, background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", display: isExpanded || selectedFile?.id === file.id ? "block" : "none" }}
-                            onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                            onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
-                            <div className="text-sm font-medium truncate" style={{ color: selectedFile?.id === file.id ? "var(--color-mustard)" : "var(--color-cream)" }}>{file.name}</div>
-                            <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-
             {/* KB Right Panel */}
             <div className="flex-1 flex flex-col min-w-0">
-              {/* Compact status bar: last rewrite + update button */}
+              {/* Compact status bar: clickable last rewrite + update button */}
               <div className="shrink-0 flex items-center justify-between px-5 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-                <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <button onClick={loadFullLog} className="text-xs transition-all" style={{ color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--color-onyx)"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
                   {logLoading ? "Loading..." : logEntries.length === 0 ? "No rewrite history" : (
-                    <>Last rewrite: {new Date(logEntries[0].timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} <span style={{ color: "rgba(22,22,22,0.3)" }}>&middot; {logEntries[0].trigger}</span></>
+                    <>Last rewrite: {new Date(logEntries[0].timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} <span style={{ color: "rgba(22,22,22,0.3)" }}>&middot; {logEntries[0].trigger}</span> <span style={{ color: "var(--color-mustard)", fontSize: 10 }}>View log</span></>
                   )}
-                </div>
+                </button>
                 <button data-tour="kb-update-button" onClick={() => setForceRewriteConfirm(true)} disabled={rewriting}
                   className="shrink-0 disabled:opacity-50"
                   style={{ borderRadius: 16, background: "#CC8A39", color: "#161616", border: "none", padding: "5px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)" }}>
@@ -1802,8 +1815,26 @@ ${context}`;
                 </button>
               </div>
 
-              {/* Main content area */}
-              {!selectedFile ? (
+              {/* Log drawer */}
+              {logDrawerOpen && (
+                <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--bg-card)" }}>
+                  <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(22,22,22,0.06)" }}>
+                    <h3 className="text-sm font-semibold" style={{ fontFamily: "var(--font-heading)" }}>Rewrite Log</h3>
+                    <button onClick={() => setLogDrawerOpen(false)} className="text-xs px-3 py-1" style={{ borderRadius: 6, background: "transparent", border: "1px solid rgba(22,22,22,0.15)", color: "rgba(22,22,22,0.5)", cursor: "pointer" }}>Close</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {fullLog.length === 0 ? <p className="text-xs" style={{ color: "var(--text-muted)" }}>No log entries</p> : fullLog.map((entry, i) => (
+                      <div key={i} className="mb-3 pb-3" style={{ borderBottom: i < fullLog.length - 1 ? "1px solid rgba(22,22,22,0.06)" : "none" }}>
+                        <div className="text-xs font-semibold" style={{ color: "var(--color-onyx)" }}>{new Date(entry.timestamp).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
+                        <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{entry.trigger}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Main content area (hidden when log drawer is open) */}
+              {logDrawerOpen ? null : !selectedFile ? (
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1} style={{ width: 48, height: 48, color: "rgba(22,22,22,0.15)", margin: "0 auto 12px" }}>
@@ -1819,7 +1850,14 @@ ${context}`;
                   {/* File viewer */}
                   <div data-tour="kb-file-viewer" className="flex-1 flex flex-col min-h-0">
                     <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: "rgba(22,22,22,0.06)", background: "var(--bg-card)" }}>
-                      <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-onyx)", fontFamily: "var(--font-heading)" }}>{selectedFile.name}</h2>
+                        {isKbUser && <button onClick={() => { setEditHistoryOpen(!editHistoryOpen); if (!editHistoryOpen) loadEditHistory(selectedFile.id); }}
+                          className="text-xs transition-all shrink-0" style={{ color: editHistoryOpen ? "var(--color-mustard)" : "rgba(22,22,22,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                          onMouseEnter={e => e.currentTarget.style.color = "var(--color-mustard)"} onMouseLeave={e => { if (!editHistoryOpen) e.currentTarget.style.color = "rgba(22,22,22,0.35)"; }}>
+                          Edit History
+                        </button>}
+                      </div>
                       <div className="flex items-center gap-2">
                         {!pendingDiff && !editStreaming && (
                           <>
@@ -1832,6 +1870,21 @@ ${context}`;
                         )}
                       </div>
                     </div>
+                    {/* Edit history drawer */}
+                    {editHistoryOpen && isKbUser && (
+                      <div className="shrink-0 overflow-y-auto px-4 py-3" style={{ maxHeight: 200, borderBottom: "1px solid rgba(22,22,22,0.08)", background: "rgba(248,246,238,0.5)" }}>
+                        {editHistoryLoading ? <div className="text-xs" style={{ color: "var(--text-muted)" }}>Loading...</div> : editHistory.length === 0 ? <div className="text-xs" style={{ color: "var(--text-muted)" }}>No edit history for this file</div> : editHistory.map(edit => (
+                          <div key={edit.id} className="mb-2 pb-2" style={{ borderBottom: "1px solid rgba(22,22,22,0.04)" }}>
+                            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                              <span style={{ fontWeight: 600, color: "var(--color-onyx)" }}>{edit.user_name}</span>
+                              <span>&middot;</span>
+                              <span>{new Date(edit.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                            </div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(22,22,22,0.6)" }}>&ldquo;{edit.instruction}&rdquo;</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {(pendingDiff || editStreaming) && (
                       <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "rgba(60,59,34,0.06)", borderBottom: "1px solid rgba(22,22,22,0.08)" }}>
                         <span className="text-xs font-medium" style={{ color: "var(--color-olive)" }}>{editStreaming ? "Generating changes..." : "Review suggested changes before saving"}</span>

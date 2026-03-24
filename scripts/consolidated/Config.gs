@@ -15,8 +15,8 @@ var CONFIG = {
   COMPILED_MASTER: "COMPILED-MasterPrompt.md",
   PERSONA: "Persona-Wyle.md",
   MANUAL_UPDATES: "KB-ManualUpdates.md",
-  REWRITE_LOG: "LOG-Rewrites.md",
-  PROCESSING_LOG: "LOG-Processing.md",
+  REWRITE_LOG: "LOG.md",
+  PROCESSING_LOG: "LOG.md",
   FEED_BRAND_VOICE: "FEED-BrandVoice.md",
   FEED_STR_INSIGHTS: "FEED-STRInsights.md",
 

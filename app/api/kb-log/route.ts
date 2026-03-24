@@ -1,4 +1,4 @@
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const webhookUrl = process.env.WYLE_KB_WEBHOOK_URL;
     if (!webhookUrl) return Response.json({ error: "WYLE_KB_WEBHOOK_URL not configured", rewrites: [] }, { status: 500 });
@@ -18,17 +18,19 @@ export async function GET() {
     const entries: string[] = data.entries || [];
 
     // Parse log entries: "Rewrite completed: 2026-03-19T02:00:00.000Z — triggered by: auto"
+    const url = new URL(req.url);
+    const full = url.searchParams.get("full") === "1";
     const rewrites = entries
       .filter(e => e.includes("Rewrite completed:"))
       .map(e => {
         const tsMatch = e.match(/Rewrite completed:\s*(.+?)\s*—/);
-        const triggerMatch = e.match(/triggered by:\s*(\w+)/);
+        const triggerMatch = e.match(/triggered by:\s*(.+)/);
         return {
           timestamp: tsMatch?.[1]?.trim() || "",
-          trigger: triggerMatch?.[1] || "unknown",
+          trigger: triggerMatch?.[1]?.trim() || "unknown",
         };
       })
-      .slice(0, 5);
+      .slice(0, full ? 100 : 5);
 
     return Response.json({
       rewrites,
