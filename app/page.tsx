@@ -43,6 +43,33 @@ interface PendingFile { name: string; base64: string; mediaType: string; preview
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv";
 interface KbFile { id: string; name: string; modifiedDate: string }
+
+interface KbFileGroup { label: string; description: string; files: KbFile[] }
+
+const KB_FILE_GROUPS: { label: string; description: string; match: (name: string) => boolean }[] = [
+  { label: "Agent Files", description: "Define each persona's behavior, tone, and knowledge. Auto-rewritten every Monday from the latest call transcripts and source documents.", match: n => n.startsWith("Agent-") },
+  { label: "Feed Files", description: "Market context and brand voice. Auto-generated from podcast syncs and market intelligence sources.", match: n => n.startsWith("FEED-") },
+  { label: "Format Files", description: "Control how Wyle structures and presents its responses.", match: n => n.startsWith("Format-") },
+  { label: "KB Files", description: "Core knowledge base sourced from the Systems & Processes, Pricing, Operations, and Training folders in Google Drive.", match: n => n.startsWith("KB-") && !n.toLowerCase().includes("salescall") },
+  { label: "Sales Calls", description: "Transcripts and summaries from sales calls, processed automatically every Monday morning.", match: n => n.toLowerCase().includes("salescall") },
+];
+
+function groupKbFiles(files: KbFile[]): KbFileGroup[] {
+  const groups: KbFileGroup[] = [];
+  const used = new Set<string>();
+  for (const g of KB_FILE_GROUPS) {
+    const matched = files.filter(f => g.match(f.name));
+    if (matched.length > 0) {
+      groups.push({ label: g.label, description: g.description, files: matched });
+      matched.forEach(f => used.add(f.id));
+    }
+  }
+  const remaining = files.filter(f => !used.has(f.id));
+  if (remaining.length > 0) {
+    groups.push({ label: "Other Files", description: "Additional source documents.", files: remaining });
+  }
+  return groups;
+}
 interface LogEntry { timestamp: string; trigger: string }
 interface EditChatMsg { role: "user" | "assistant"; text: string }
 
@@ -1713,14 +1740,22 @@ ${context}`;
                   ) : kbFiles.length === 0 ? (
                     <p className="text-xs px-4 py-4" style={{ color: "rgba(237,233,225,0.4)" }}>No source files found</p>
                   ) : (
-                    kbFiles.map(file => (
-                      <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-3 transition-all"
-                        style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-                        onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                        onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
-                        <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
-                        <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                      </button>
+                    groupKbFiles(kbFiles).map(group => (
+                      <div key={group.label}>
+                        <div style={{ padding: "12px 16px 4px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--color-mustard)", marginBottom: 3 }}>{group.label}</div>
+                          <div style={{ fontSize: 11, lineHeight: 1.4, color: "rgba(237,233,225,0.45)", marginBottom: 6 }}>{group.description}</div>
+                        </div>
+                        {group.files.map(file => (
+                          <button key={file.id} onClick={() => openFile(file)} className="w-full text-left px-4 py-2.5 transition-all"
+                            style={{ background: selectedFile?.id === file.id ? "rgba(204,138,57,0.12)" : "transparent", cursor: "pointer", border: "none", borderLeft: selectedFile?.id === file.id ? "3px solid var(--color-mustard)" : "3px solid transparent", borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+                            onMouseEnter={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                            onMouseLeave={e => { if (selectedFile?.id !== file.id) e.currentTarget.style.background = "transparent"; }}>
+                            <div className="text-sm font-medium truncate" style={{ color: "var(--color-cream)" }}>{file.name}</div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(237,233,225,0.5)" }}>{new Date(file.modifiedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                          </button>
+                        ))}
+                      </div>
                     ))
                   )}
                 </div>
